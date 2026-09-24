@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>造物主 · GOD VIEW — 人类进化史诗</title>
+<style>
+:root{
+  --gold:#d4af37; --gold-dim:rgba(212,175,55,.35); --panel:rgba(10,14,24,.86);
+  --ink:#e8dcc0; --ink-dim:#9a917c; --danger:#e05c4a; --good:#6fd08c; --info:#7fb8e8;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#07090f;
+  font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;color:var(--ink)}
+.serif{font-family:Georgia,"Times New Roman","STZhongsong","SimSun",serif}
+#game{position:absolute;inset:0;cursor:grab;display:block}
+#game.panning{cursor:grabbing}
+#game.aiming{cursor:crosshair}
+
+/* ---------- HUD 通用 ---------- */
+.hud{position:absolute;z-index:10}
+.panel{background:var(--panel);border:1px solid var(--gold-dim);border-radius:10px;
+  backdrop-filter:blur(8px);box-shadow:0 4px 24px rgba(0,0,0,.5)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;
+  background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);font-size:13px;white-space:nowrap}
+.chip b{font-size:14px;color:#fff;font-weight:600}
+.bar{position:relative;height:7px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden;flex:1;min-width:46px}
+.bar>i{position:absolute;inset:0;transform-origin:left;border-radius:4px;transition:transform .25s}
+
+/* ---------- 顶部 HUD ---------- */
+#hud-top{top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;
+  padding:10px 12px;pointer-events:none;gap:8px}
+#hud-top .col{display:flex;flex-direction:column;gap:6px;pointer-events:auto}
+#stats-left{flex-direction:row!important;flex-wrap:wrap;max-width:44vw;gap:6px}
+#stats-left .chip{flex-direction:column;align-items:flex-start;gap:2px;min-width:92px}
+#stats-left .chip .lbl{font-size:10px;color:var(--ink-dim);letter-spacing:1px}
+#pow-wrap{display:flex;flex-direction:column;gap:6px;width:210px}
+#era-banner{pointer-events:auto;text-align:center;padding:8px 26px 10px;min-width:340px;max-width:520px}
+#era-name{font-size:21px;letter-spacing:6px;color:var(--gold);text-shadow:0 0 18px rgba(212,175,55,.45)}
+#era-sub{font-size:10px;letter-spacing:2px;color:var(--ink-dim);margin:2px 0 7px}
+#era-bar{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--ink-dim)}
+#era-info{white-space:nowrap}
+#ctrl-right{flex-direction:row!important;gap:6px}
+.btn{pointer-events:auto;cursor:pointer;padding:6px 12px;border-radius:8px;font-size:13px;
+  background:rgba(0,0,0,.35);border:1px solid var(--gold-dim);color:var(--ink);transition:.15s}
+.btn:hover{background:rgba(212,175,55,.18);border-color:var(--gold)}
+.btn.on{background:rgba(212,175,55,.28);border-color:var(--gold);color:#ffe9a8}
+.btn.danger:hover{background:rgba(224,92,74,.25);border-color:var(--danger)}
+
+/* ---------- 右侧神力面板 ---------- */
+#toolbar{top:118px;right:12px;bottom:150px;width:196px;display:flex;flex-direction:column;
+  padding:10px;overflow:hidden auto;scrollbar-width:thin;pointer-events:auto}
+#toolbar h3{font-size:12px;letter-spacing:3px;color:var(--gold);margin:8px 0 6px;display:flex;align-items:center;gap:6px}
+#toolbar h3:first-child{margin-top:0}
+#toolbar h3::after{content:"";flex:1;height:1px;background:var(--gold-dim)}
+.pgroup{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pbtn{position:relative;aspect-ratio:1;border-radius:9px;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.1);cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1px;transition:.12s;overflow:hidden}
+.pbtn:hover{background:rgba(212,175,55,.15);border-color:var(--gold-dim)}
+.pbtn.sel{border-color:var(--gold);box-shadow:0 0 12px rgba(212,175,55,.5),inset 0 0 8px rgba(212,175,55,.2);background:rgba(212,175,55,.18)}
+.pbtn.dis{opacity:.32;pointer-events:none}
+.pbtn .ic{font-size:19px;line-height:1}
+.pbtn .nm{font-size:9px;color:var(--ink-dim);transform:scale(.92)}
+.pbtn .cost{position:absolute;top:2px;right:4px;font-size:8px;color:var(--info)}
+.pbtn .cd{position:absolute;left:0;bottom:0;width:100%;background:rgba(0,0,0,.55);pointer-events:none}
+#power-tip{position:absolute;z-index:60;max-width:230px;padding:9px 11px;font-size:12px;line-height:1.55;
+  display:none;pointer-events:none}
+#power-tip b{color:var(--gold)}
+#power-tip .req{color:var(--info)}
+#adapt-list{display:flex;flex-direction:column;gap:4px}
+.adapt{display:flex;gap:7px;align-items:center;font-size:11px;padding:4px 6px;border-radius:7px;
+  background:rgba(255,255,255,.04);border:1px solid transparent}
+.adapt.got{border-color:rgba(111,208,140,.35)}
+.adapt .ic{font-size:15px;filter:grayscale(1) opacity(.35)}
+.adapt.got .ic{filter:none}
+.adapt .nm{color:var(--ink-dim)} .adapt.got .nm{color:var(--good)}
+.adapt .rq{font-size:9px;color:#6b6355;display:block}
+
+/* ---------- 底部 ---------- */
+#minimap-box{left:12px;bottom:12px;padding:6px;pointer-events:auto}
+#minimap{display:block;border-radius:6px;cursor:pointer}
+#log-box{left:50%;transform:translateX(-50%);bottom:12px;width:min(620px,60vw);
+  padding:8px 14px;pointer-events:none;font-size:13px}
+#log-line{display:flex;flex-direction:column-reverse;gap:3px;max-height:88px;overflow:hidden}
+#log-line div{opacity:.95;text-shadow:0 1px 3px #000;animation:login .4s}
+@keyframes login{from{opacity:0;transform:translateY(8px)}}
+.lg-era{color:var(--gold)} .lg-good{color:var(--good)} .lg-bad{color:var(--danger)}
+.lg-god{color:#c9b3ff} .lg-sys{color:var(--info)} .lg-story{color:#e8dcc0;font-style:italic}
+
+/* ---------- 提示浮层 ---------- */
+#toasts{top:118px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;
+  align-items:center;gap:8px;pointer-events:none;z-index:50}
+.toast{padding:10px 26px;font-size:15px;letter-spacing:1px;text-align:center;border-radius:10px;
+  background:var(--panel);border:1px solid var(--gold);color:#ffe9a8;
+  animation:toastin .5s;box-shadow:0 0 30px rgba(212,175,55,.25);max-width:70vw}
+.toast.big{font-size:26px;letter-spacing:8px;padding:16px 40px;font-weight:700}
+.toast.bad{border-color:var(--danger);color:#ffb3a8;box-shadow:0 0 30px rgba(224,92,74,.3)}
+@keyframes toastin{from{opacity:0;transform:translateY(-14px) scale(.92)}}
+
+/* ---------- 全屏覆盖层 ---------- */
+.overlay{position:absolute;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 40%,rgba(18,24,40,.88),rgba(4,6,10,.96));backdrop-filter:blur(6px)}
+.overlay.hide{display:none}
+.ov-card{max-width:680px;max-height:88vh;overflow:auto;padding:38px 46px;text-align:center;
+  border:1px solid var(--gold-dim);border-radius:16px;background:rgba(8,11,19,.8);box-shadow:0 0 80px rgba(212,175,55,.12)}
+.ov-card h1{font-size:44px;letter-spacing:14px;color:var(--gold);text-shadow:0 0 30px rgba(212,175,55,.5);margin-bottom:4px}
+.ov-card h2{font-size:13px;letter-spacing:6px;color:var(--ink-dim);margin-bottom:22px}
+.ov-card p{font-size:14px;line-height:1.9;color:var(--ink);margin-bottom:14px;text-align:left}
+.ov-card p.tc{text-align:center}
+.ov-card .hl{color:var(--gold)}
+.ov-card .gd{color:var(--good)} .ov-card .bd{color:var(--danger)}
+.bigbtn{margin-top:10px;padding:13px 52px;font-size:18px;letter-spacing:8px;border-radius:12px;cursor:pointer;
+  background:linear-gradient(180deg,rgba(212,175,55,.25),rgba(212,175,55,.1));border:1px solid var(--gold);
+  color:#ffe9a8;transition:.2s}
+.bigbtn:hover{background:rgba(212,175,55,.4);box-shadow:0 0 26px rgba(212,175,55,.45)}
+table.keys{width:100%;font-size:12.5px;border-collapse:collapse;margin-bottom:14px}
+table.keys td{padding:4px 8px;border-bottom:1px dashed rgba(255,255,255,.1);color:var(--ink-dim)}
+table.keys td:first-child{color:var(--info);white-space:nowrap;font-family:Consolas,monospace}
+.ch-row{display:flex;gap:10px;padding:6px 8px;font-size:13px;line-height:1.55;border-left:3px solid #555;border-radius:4px;background:rgba(255,255,255,.03);margin-bottom:4px}
+.ch-row .y{color:var(--ink-dim);white-space:nowrap;font-size:11px;padding-top:2px;min-width:86px}
+.ch-row.k-era{border-color:var(--gold);color:#ffe9a8}
+.ch-row.k-war{border-color:var(--danger);color:#ffb3a8}
+.ch-row.k-adapt{border-color:var(--good);color:#a8e0b8}
+.ch-row.k-culture{border-color:#c9b3ff;color:#d8ccf5}
+.ch-row.k-god{border-color:#7fb8e8;color:#bcd9f0}
+.ch-row.k-doom{border-color:#7a3a30;color:#c98a7d}
+.ch-row.k-story{border-color:#8a7a5a;font-style:italic}
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 26px;text-align:left;font-size:14px;margin:14px 0}
+.statgrid b{color:var(--gold);float:right}
+#ov-rocket{font-size:52px;margin-bottom:8px;animation:fly 3s ease-in infinite alternate}
+@keyframes fly{to{transform:translateY(-16px)}}
+@media (max-width:1100px){ #toolbar{width:172px} #era-banner{min-width:280px} }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- 顶部 HUD -->
+<div id="hud-top" class="hud">
+  <div class="col" id="stats-left">
+    <div class="chip"><span class="lbl">👥 人口</span><b id="st-pop">0</b></div>
+    <div class="chip"><span class="lbl">🧠 知识</span><b id="st-kn">0</b></div>
+    <div class="chip"><span class="lbl">🌾 粮储</span><b id="st-food">—</b></div>
+    <div class="chip" style="min-width:130px"><span class="lbl">✨ 神力</span>
+      <div style="display:flex;align-items:center;gap:6px;width:100%">
+        <div class="bar"><i id="bar-pow" style="background:linear-gradient(90deg,#7fb8e8,#b7d9f5)"></i></div>
+        <span id="st-pow" style="font-size:11px;color:var(--info)">100</span></div></div>
+    <div class="chip"><span class="lbl">🗓 季节</span><b id="st-season">🌸春</b></div>
+    <div class="chip" style="min-width:130px"><span class="lbl">🙏 信仰</span>
+      <div style="display:flex;align-items:center;gap:6px;width:100%">
+        <div class="bar"><i id="bar-faith" style="background:linear-gradient(90deg,#d4af37,#ffe9a8)"></i></div>
+        <span id="st-faith" style="font-size:11px;color:var(--gold)">20</span></div></div>
+  </div>
+
+  <div class="col">
+    <div id="era-banner" class="panel serif">
+      <div id="era-name">蒙昧时代</div>
+      <div id="era-sub">DAWN OF HOMINIDS</div>
+      <div id="era-bar"><span id="era-info">知识 0 / 300</span><div class="bar"><i id="bar-era" style="background:linear-gradient(90deg,#8c6ff0,#c9b3ff)"></i></div><span id="era-pct">0%</span></div>
+    </div>
+  </div>
+
+  <div class="col" id="ctrl-right">
+    <button class="btn" id="btn-pause" title="暂停/继续 (空格)">⏸</button>
+    <button class="btn" id="spd-05" title="0.5倍速 · 观察自然生长">0.5×</button>
+    <button class="btn on" id="spd-1" title="1倍速">1×</button>
+    <button class="btn" id="spd-2" title="2倍速">2×</button>
+    <button class="btn" id="spd-4" title="4倍速">4×</button>
+    <button class="btn" id="btn-mute" title="声音开关 (M)">🔊</button>
+    <button class="btn" id="btn-chron" title="文明长卷 (C)">📜</button>
+    <button class="btn" id="btn-help" title="玩法说明 (H)">?</button>
+    <button class="btn danger" id="btn-reset" title="重新创世">↻</button>
+  </div>
+</div>
+
+<!-- 右侧：神力 & 文明 -->
+<div id="toolbar" class="hud panel">
+  <h3>🌤 天气</h3><div class="pgroup" id="pg-weather"></div>
+  <h3>☄ 天灾</h3><div class="pgroup" id="pg-disaster"></div>
+  <h3>✨ 神恩</h3><div class="pgroup" id="pg-bless"></div>
+  <h3>🏆 文明适应</h3><div id="adapt-list"></div>
+</div>
+<div id="power-tip" class="panel"></div>
+
+<!-- 底部：小地图 & 日志 -->
+<div id="minimap-box" class="hud panel"><canvas id="minimap" width="320" height="200"></canvas></div>
+<div id="log-box" class="hud panel"><div id="log-line"></div></div>
+
+<div id="toasts" class="hud"></div>
+
+<!-- 标题 -->
+<div id="ov-title" class="overlay">
+  <div class="ov-card serif">
+    <h1>造物主</h1>
+    <h2>GOD VIEW · 人类进化史诗</h2>
+    <p class="tc" style="text-align:center">起初,世界一片洪荒。<br>你——造物主,将在这颗星球上播下生命的火种。</p>
+    <p>🌡️ 你执掌 <span class="hl">天气</span> 与 <span class="hl">天灾</span>:雷火、洪水、火山、陨石、瘟疫、冰河世纪……<br>
+    🧠 而你的子民拥有这个世界上最可怕的力量——<span class="hl">智慧</span>。<br>
+    每一场幸存的灾难,都会淬炼出新的文明适应:<span class="gd">天火 → 掌控火种</span>、<span class="gd">洪水 → 水利</span>、<span class="gd">瘟疫 → 医学</span>……<br>
+    他们将从蒙昧的古猿,一路走向<span class="hl">石器、火焰、农业、青铜、工业、电气、信息,直至迈向群星</span>。</p>
+    <p style="text-align:center"><span class="bd">记住:过度的仁慈让文明停滞,适度的苦难是最深的恩赐。</span></p>
+    <p class="tc" style="text-align:center;font-size:12px;color:var(--ink-dim)">拖拽/滚轮/WASD 移动视角 · 点选右侧神力后点击大地施放 · 空格暂停</p>
+    <button class="bigbtn" id="btn-start">开 始 创 世</button>
+  </div>
+</div>
+
+<!-- 文明长卷 -->
+<div id="ov-chron" class="overlay hide">
+  <div class="ov-card serif" style="max-width:760px;width:86vw">
+    <h1 style="font-size:30px;letter-spacing:10px">文明长卷</h1>
+    <h2>THE CHRONICLE — 一切已发生的,都刻在这里</h2>
+    <div id="chron-list" style="text-align:left;max-height:56vh;overflow-y:auto;padding:4px 6px"></div>
+    <button class="bigbtn" id="btn-chron-close" style="margin-top:16px">合 上 长 卷</button>
+  </div>
+</div>
+
+<!-- 帮助 -->
+<div id="ov-help" class="overlay hide">
+  <div class="ov-card serif">
+    <h1 style="font-size:28px;letter-spacing:8px">圣典 · 玩法</h1>
+    <h2>HOW TO PLAY</h2>
+    <p><span class="hl">目标:</span>引导你的子民从 12 只古猿进化到<span class="hl">太空时代</span>。知识由人口随时间积累,人口需要粮食,粮食需要肥沃的土地与风调雨顺。</p>
+    <p><span class="hl">神力(✨):</span>施放天气/天灾/神恩的燃料,随时间恢复,信仰越高恢复越快。<br>
+    <span class="hl">信仰(🙏):</span>人口繁盛与神迹提升信仰;滥杀无辜会动摇信仰,神力恢复随之放缓。</p>
+    <p><span class="hl">文明适应:</span>灾后幸存的文明会进化出抗性(如水利、医学、抗震……),并获得大量知识——<span class="gd">多难兴邦</span>。每个时代需要不同的人口规模与知识,部分时代还需要特定契机(如"火焰时代"需要部落接触过天火)。</p>
+    <table class="keys">
+      <tr><td>鼠标左键</td><td>施放已选中的神力(再按 Esc 取消选择)</td></tr>
+      <tr><td>右键拖拽 / 空格+左键拖拽</td><td>移动视角</td></tr>
+      <tr><td>滚轮 / +−</td><td>缩放视角</td></tr>
+      <tr><td>W A S D / 方向键</td><td>平移视角</td></tr>
+      <tr><td>空格</td><td>暂停 / 继续</td></tr>
+      <tr><td>1 / 2 / 3 / 4</td><td>切换 1× / 2× / 4× / 0.5× 倍速(0.5× 观察自然生长)</td></tr>
+      <tr><td>M / H</td><td>静音 / 打开本说明</td></tr>
+    </table>
+    <p class="tc" style="text-align:center"><span class="bd">若人口归零,文明灭绝,创世失败。</span></p>
+    <button class="bigbtn" id="btn-help-close">返 回</button>
+  </div>
+</div>
+
+<!-- 灭绝 -->
+<div id="ov-over" class="overlay hide">
+  <div class="ov-card serif">
+    <h1 style="color:var(--danger);text-shadow:0 0 30px rgba(224,92,74,.5)">文明灭绝</h1>
+    <h2>EXTINCTION</h2>
+    <p class="tc" id="over-reason" style="text-align:center;color:var(--ink-dim)"></p>
+    <div class="statgrid" id="over-stats"></div>
+    <p class="tc" style="text-align:center;color:var(--ink-dim);font-style:italic">尘埃落定,唯有风声。也许下一个世界,你会更温柔一些。</p>
+    <button class="bigbtn" onclick="location.reload()">重 新 创 世</button>
+  </div>
+</div>
+
+<!-- 胜利 -->
+<div id="ov-win" class="overlay hide">
+  <div class="ov-card serif">
+    <div id="ov-rocket">🚀</div>
+    <h1>迈向群星</h1>
+    <h2>TO THE STARS — 文明升空</h2>
+    <p class="tc" style="text-align:center">你的子民挣脱了摇篮。<br>从雷火中颤抖的猿群,到穿越苍穹的文明——这一切,都始于你的第一次注视。</p>
+    <div class="statgrid" id="win-stats"></div>
+    <button class="bigbtn" id="btn-continue">继续注视这个世界</button>
+  </div>
+</div>
+
+<script src="js/config.js?v=20"></script>
+<script src="js/world.js?v=17"></script>
+<script src="js/audio.js?v=17"></script>
+<script src="js/sim.js?v=20"></script>
+<script src="js/disasters.js?v=17"></script>
+<script src="js/render.js?v=17"></script>
+<script src="js/ui.js?v=17"></script>
+<script src="js/main.js?v=17"></script>
+</body>
+</html>
