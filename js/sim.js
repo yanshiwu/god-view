@@ -582,6 +582,8 @@ function pickJob(s){
   w.plant   = (G.era>=2 ? (S.name==='春' ? 1.4 : .3) : .15);
   // 渔人(养鱼):水边聚落才有正经渔养
   w.fishfarm= (s.geo==='river'||s.geo==='coast'||s.geo==='swamp') ? 2 : .3;
+  // 游斥(扩张精神):每族常备少量斥候远行探索,可能闯入他族领地
+  w.walk = .55 + s.level*.1;
   // 采者:附近有浆果丛
   w.gather = 1.2;
   // 草药师(农业时代起):林地越密,药草越丰(Banished 式)
@@ -634,12 +636,57 @@ function manageWalkers(){
       if (w.home===s.id && w.kind!=='dead' && (w.kind==='walk' || RNG()<.3)) w.kind = pickJob(s);
   }
 }
+// —— 边境守卫:无邦交者闯入领地,驱逐或格杀(军队概念的雏形) ——
+function borderCheck(w, home){
+  // 与邻族结盟者自由通行
+  for (const s of aliveSettlements()){
+    if (s.id===home.id || !s.alive) continue;
+    const r = (LEVELS[s.level].r + 1.2) * TILE;
+    const d = Math.hypot(w.x-s.tx, w.y-s.ty);
+    if (d > r) continue;
+    const rel = G.relations[relKey(home, s)];
+    const friendly = rel && (rel.ally || (rel.grudge||0) <= -3);
+    if (friendly) return false;
+    // 闯入:驱逐(押送出境)或格杀
+    const eraGuard = G.era>=4 ? .55 : G.era>=2 ? .45 : .35; // 时代越晚,守卫越凶
+    if (RNG() < .5){
+      // 驱逐:逐回本族方向
+      const dx = home.tx - w.tx, dy = home.ty - w.ty, dd = Math.hypot(dx,dy)||1;
+      w.tx = w.x + dx/dd*10*TILE; w.ty = w.y + dy/dd*10*TILE;
+      w.expelled = (w.expelled||0)+1;
+      if (RNG() < .25){
+        const t = `🛡 ${s.name} 的守卫将闯入领地的 ${home.name} 族人押送出境。`;
+        if (!G.flags['b'+s.id+'_'+home.id] || RNG()<.06){ log(t, 'lg-dim'); }
+      }
+    } else {
+      // 格杀:边衅流血
+      w.kind='dead'; w.deadT=0; w.cause='border';
+      G.stats.deaths += 1; s.pop = Math.max(1, s.pop-1);
+      FX.burst(w.x, w.y, 6, '#c04040', 40);
+      const rk = relKey(home, s);
+      if (!G.relations[rk]) G.relations[rk] = {grudge:0};
+      G.relations[rk].grudge = (G.relations[rk].grudge||0) + 8;
+      if (RNG() < .3){
+        const t = `⚔️ 边衅:${s.name} 的守卫在边境格杀了擅闯的 ${home.name} 族人——血的代价。`;
+        log(t, 'lg-bad'); chron(t, 'war');
+      }
+    }
+    return true;
+  }
+  return false;
+}
 function updateWalkers(dt){
   const alive = aliveSettlements();
   for (const w of G.walkers){
     if (w.kind==='dead'){ w.deadT=(w.deadT||0)+dt; continue; }
     const home = G.settlements[w.home];
     if (!home || !home.alive){ w.kind='dead'; w.deadT=(w.deadT||0)+dt; continue; }
+    // 远行者途经他族领地:无邦交则被驱逐或格杀(每 2 秒查一次)
+    if ((w.kind==='walk'||w.kind==='hunt'||w.kind==='gather'||w.kind==='herb'||w.kind==='mine'||w.kind==='fishfarm')
+        && w.tx!==undefined && Math.hypot(w.tx-w.x, w.ty-w.y) > 3){
+      w._bcT = (w._bcT||0) + dt;
+      if (w._bcT > 2){ w._bcT = 0; borderCheck(w, home); if (w.kind==='dead') continue; }
+    }
     // 农夫:寻找成熟农田,收割入仓
     if (w.kind==='farm'){
       if (w.tile===undefined || W.FS[w.tile]<3 || W.FS[w.tile]>=6 || W.FARM[w.tile]!==home.id+1)
@@ -931,7 +978,7 @@ function updateWalkers(dt){
       } else {
         // 闲逛也要有去处:八成远行(8~20格外),两成去浆果丛/林地/水边
         if (RNG() < .8){
-          const a = RNG()*Math.PI*2, dist = (8+RNG()*12)*TILE;
+          const a = RNG()*Math.PI*2, dist = (12+RNG()*28)*TILE; // 扩张精神:远行 12~40 格
           w.tx = home.tx + Math.cos(a)*dist; w.ty = home.ty + Math.sin(a)*dist;
         } else {
           const spot = findTileNear(home, t=>t===TER.FOREST||t===TER.RIVER||t===TER.OASIS, 14);
@@ -943,6 +990,9 @@ function updateWalkers(dt){
     } else {
       const v = w.spd*dt;
       w.x += dx/d*v; w.y += dy/d*v;
+      // 途中每走一段,查一次是否擅入他族领地
+      w._bcT = (w._bcT||0) + dt;
+      if (w._bcT > 1.5){ w._bcT = 0; borderCheck(w, home); }
     }
   }
   // 清理死者与归零
@@ -1350,12 +1400,29 @@ function resolveWar(w, A, B){
   FX.burst(B.tx, B.ty, 34, '#e05c4a', 100);
   FX.burst(B.tx, B.ty, 20, '#ffd86b', 70);
   FX.shake=.55;
-  if (B.pop < 3){
-    const absorbed = w.sent*.6;
+  // 溃败线:守军折损过七成即开城投降——被吞并的部落永久消失
+  if (B.pop < 3 || (w.sent > 0 && defLoss > B.pop*.7 + w.sent*.5)){
+    const absorbed = Math.max(B.pop, w.sent*.6);
     A.pop += absorbed;
-    log(`🔥 城破!${A.name} 的${WEAPON_NAMES[Math.min(G.era,8)]}踏平了 ${B.name},幸存者并入征服者。`, 'lg-bad');
-    bigToast('⚔️ 城破', `${A.name} 吞并了 ${B.name}`);
-    chron(`${A.name} 以${WEAPON_NAMES[Math.min(G.era,8)]}灭 ${B.name}`, 'war');
+    // 吞并遗产:农田、存粮、部分疆域尽归征服者
+    let farmN = 0;
+    for (let i=0;i<W.FARM.length;i++){
+      if (W.FARM[i]===B.id+1){ W.FARM[i]=A.id+1; W.FS[i]=Math.min(W.FS[i],2); farmN++; }
+    }
+    A.store = Math.min(storeCap(A), A.store + B.store*.5);
+    A.damaged = Math.min(1, A.damaged + .1);
+    G.morale = Math.min(100, G.morale + 4);
+    G.faith = Math.min(100, G.faith + 2);
+    log(`🏴 吞并!${A.name} 将 ${B.name} 并入版图——${fmt(absorbed)} 人尽入征服者治下${farmN?`,接管 ${farmN} 块农田`:''}。「${B.name}」之名自此从大地上消失。`, 'lg-bad');
+    bigToast('🏴 吞并', `${A.name} 吞并了 ${B.name}——其名永逝`);
+    chron(`【吞并】${A.name} 灭 ${B.name} 而并其地,${B.name} 自此永载史册,却不再存在。`, 'war');
+    // 四邻震恐
+    for (const o of aliveSettlements()){
+      if (o===A || o===B) continue;
+      const rk = relKey(o, A);
+      if (!G.relations[rk]) G.relations[rk] = {grudge:0};
+      G.relations[rk].grudge = (G.relations[rk].grudge||0) + 5;
+    }
     destroySettlement(B, 'war');
   } else {
     log(`⚔️ ${A.name} 的${WEAPON_NAMES[Math.min(G.era,8)]}撞上 ${B.name} 的防线,双方共损失 ${fmt(defLoss+atkLoss)} 人。`, 'lg-bad');
