@@ -485,6 +485,29 @@ function eraUp(i){
   }
   G.hints = {};
 }
+// —— 灾祸夺命:死者具象化为尸骸与坟茔,并昭告天下 ——
+function massDeath(s, n, cause){
+  if (n < 1) return;
+  n = Math.min(n, s.pop);
+  s.pop -= n; G.stats.deaths += n; G.lastCause = causeName(cause);
+  // 尸骸具象:最多 10 具,散落聚落周围
+  const bodies = Math.min(10, Math.max(2, Math.ceil(n/Math.max(4, s.pop*.12))));
+  for (let k=0;k<bodies;k++){
+    G.walkers.push({x:s.tx+rnd(-16,16), y:s.ty+rnd(-14,14), tx:s.tx, ty:s.ty,
+      home:s.id, spd:0, kind:'dead', deadT:0, cause:'disaster', ph:RNG()*7});
+  }
+  FX.burst(s.tx, s.ty, 16, '#c04040', 90);
+  const cn = causeName(cause);
+  if (n >= 3){
+    log(`☠️ ${cn}夺走了 ${s.name} ${fmt(n)} 条性命,尸骸枕藉……`, 'lg-bad');
+    if (n >= s.pop*.15) bigToast(`☠️ ${cn}之殇`, `${s.name} 痛失 ${fmt(n)} 人`);
+  }
+  if (s.chief && n > s.pop*.25 && RNG()<.5){
+    const t = `【王朝】大灾之中,${s.name} 的首领 ${s.chief.name} 也未能幸免。`;
+    s.chief = newChief(s);
+    log(t, 'lg-bad'); chron(t, 'doom');
+  }
+}
 function damageSettlement(s, frac, cause, sev=2){
   if (!s.alive || frac<=0) return false;
   let resist = Math.max(.12, 1 - G.era*.06);
@@ -494,7 +517,7 @@ function damageSettlement(s, frac, cause, sev=2){
   if (cause==='cold' && G.flags.fire) resist *= .25;
   if (cause==='cold' && G.adaptations.clothing) resist *= .15;
   const d = s.pop * Math.min(.97, frac * resist);
-  s.pop -= d; G.stats.deaths += d; G.lastCause = causeName(cause);(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
+  massDeath(s, d, cause);(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
   s.damaged = Math.min(1, s.damaged + frac*.55);
   if (s.pop < 1.5){ destroySettlement(s, cause); return false; }
   return true; // 幸存
@@ -836,7 +859,8 @@ function updateWalkers(dt){
       if (w.site===undefined || Math.hypot(w.tx-w.x,w.ty-w.y)<3 && w.jobT>12){
         const r2 = 6 + home.level*5;
         w.site = 1; w.jobT = 0;
-        w.tx = home.tx + rnd(-r2,r2)*.8; w.ty = home.ty + rnd(-r2,r2)*.8;
+        const a2 = RNG()*Math.PI*2;
+        w.tx = home.tx + Math.cos(a2)*r2*TILE*.8; w.ty = home.ty + Math.sin(a2)*r2*TILE*.8;
       }
       const bdx=w.tx-w.x, bdy=w.ty-w.y, bd=Math.hypot(bdx,bdy);
       if (bd < 3){
@@ -905,8 +929,16 @@ function updateWalkers(dt){
           w.tx=o.tx+rnd(-10,10); w.ty=o.ty+rnd(-10,10); w.back = home.id;
         }
       } else {
-        const r = LEVELS[home.level].r*TILE + 8;
-        w.tx = home.tx + rnd(-r,r)*.7; w.ty = home.ty + rnd(-r,r)*.7;
+        // 闲逛也要有去处:八成远行(8~20格外),两成去浆果丛/林地/水边
+        if (RNG() < .8){
+          const a = RNG()*Math.PI*2, dist = (8+RNG()*12)*TILE;
+          w.tx = home.tx + Math.cos(a)*dist; w.ty = home.ty + Math.sin(a)*dist;
+        } else {
+          const spot = findTileNear(home, t=>t===TER.FOREST||t===TER.RIVER||t===TER.OASIS, 14);
+          if (spot){ w.tx = spot.x*TILE+7; w.ty = spot.y*TILE+7; }
+          else { const a = RNG()*Math.PI*2, dist=(6+RNG()*10)*TILE;
+                 w.tx = home.tx + Math.cos(a)*dist; w.ty = home.ty + Math.sin(a)*dist; }
+        }
       }
     } else {
       const v = w.spd*dt;
@@ -915,7 +947,7 @@ function updateWalkers(dt){
   }
   // 清理死者与归零
   if ((G.year&31)===0 || G.walkers.length>560)
-    G.walkers = G.walkers.filter(w=> w.kind!=='dead' || w.deadT<8);
+    G.walkers = G.walkers.filter(w=> w.kind!=='dead' || (w.cause==='disaster' ? w.deadT<24 : w.deadT<8));
 }
 // —— 首领与王朝(CK 式):性格即命运 ——
 const CHIEF_NAMES = ['岩','风','火','川','岳','星','雷','霜','林','云','野','石'];

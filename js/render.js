@@ -694,12 +694,22 @@ function drawWalkers(){
   for (const w of G.walkers){
     if (w.kind==='dead'){
       const dt2 = w.deadT||0;
-      if (dt2 < 6){
-        ctx.globalAlpha = Math.max(0, 1-dt2/6);
-        ctx.fillStyle='#8a8a92';
-        ctx.beginPath(); ctx.arc(w.x, w.y, 1.8, 0, 7); ctx.fill();
-        ctx.fillStyle='#b0b0b8';
-        ctx.fillRect(w.x-1.2, w.y-2.6, 2.4, 1.2);
+      const dur = w.cause==='disaster' ? 22 : 8;
+      if (dt2 < dur){
+        ctx.globalAlpha = Math.max(0, 1-dt2/dur);
+        if (w.cause==='disaster' && dt2 < 4){
+          // 刚倒下:倒卧的身躯
+          ctx.fillStyle='#7a3a3a';
+          ctx.beginPath(); ctx.ellipse(w.x, w.y, 3.4, 1.6, (w.ph||0), 0, 7); ctx.fill();
+          ctx.fillStyle='#8a6a48';
+          ctx.beginPath(); ctx.arc(w.x+3, w.y-.6, 1.1, 0, 7); ctx.fill();
+        } else {
+          // 之后:坟茔石堆
+          ctx.fillStyle='#8a8a92';
+          ctx.beginPath(); ctx.arc(w.x, w.y, 1.8, 0, 7); ctx.fill();
+          ctx.fillStyle='#b0b0b8';
+          ctx.fillRect(w.x-1.2, w.y-2.6, 2.4, 1.2);
+        }
         ctx.globalAlpha = 1;
       }
       continue;
