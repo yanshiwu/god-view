@@ -20,22 +20,22 @@ const POWER_MAX = 100;
 // ---- 地形 ----
 const TER = { DEEP:0, SEA:1, BEACH:2, GRASS:3, FOREST:4, HILL:5, MOUNT:6, PEAK:7, DESERT:8, TUNDRA:9, SWAMP:10, BASALT:11, RUBBLE:12, RIVER:13, OASIS:14, LAKE:15 };
 const TERR = [
-  {name:'深海',   col:'#0a2c4a', col2:'#0d3860', water:true,  fert:0},
-  {name:'浅海',   col:'#155d8a', col2:'#1d7bb0', water:true,  fert:0.08},
-  {name:'沙滩',   col:'#d9c38a', col2:'#c8b076', fert:0.3},
-  {name:'草原',   col:'#699f4a', col2:'#78af55', fert:1.0},
-  {name:'森林',   col:'#4c7c3c', col2:'#40692f', fert:0.72, trees:true},
-  {name:'丘陵',   col:'#8a915f', col2:'#79825a', fert:0.45},
-  {name:'山地',   col:'#8d8d93', col2:'#7a7a82', fert:0.08},
-  {name:'雪峰',   col:'#cfd8e3', col2:'#bac7d6', fert:0.02},
-  {name:'荒漠',   col:'#c9b078', col2:'#b9a065', fert:0.12},
-  {name:'苔原',   col:'#9aa886', col2:'#8a997a', fert:0.28},
-  {name:'沼泽',   col:'#5c7050', col2:'#4e6144', fert:0.55, trees:true},
-  {name:'火山沃土',col:'#4a4348', col2:'#3e383d', fert:1.35},
-  {name:'焦土',   col:'#6e6259', col2:'#5d534c', fert:0.18},
-  {name:'河流',   col:'#2a6ea8', col2:'#3a7fb8', water:true, fert:0},
-  {name:'绿洲',   col:'#3aa87a', col2:'#2f8f68', water:true, fert:1.3},
-  {name:'湖泊',   col:'#1e6ba0', col2:'#2a80b8', water:true, fert:0},
+  {name:'深海',   col:'#0a2c4a', col2:'#0d3860', col3:'#123f6b', water:true,  fert:0},
+  {name:'浅海',   col:'#155d8a', col2:'#1d7bb0', col3:'#2b86bd', water:true,  fert:0.08},
+  {name:'沙滩',   col:'#d9c38a', col2:'#c8b076', col3:'#e8d9a8', fert:0.3},
+  {name:'草原',   col:'#699f4a', col2:'#78af55', col3:'#8cc463', fert:1.0},
+  {name:'森林',   col:'#4c7c3c', col2:'#40692f', col3:'#5f9448', fert:0.72, trees:true},
+  {name:'丘陵',   col:'#8a915f', col2:'#79825a', col3:'#a89468', fert:0.4},
+  {name:'山地',   col:'#8d8d93', col2:'#7a7a82', col3:'#98918a', fert:0.0},
+  {name:'雪峰',   col:'#cfd8e3', col2:'#bac7d6', col3:'#c8c4be', fert:0.02},
+  {name:'荒漠',   col:'#c9b078', col2:'#b9a065', col3:'#e6c98a', fert:0.1},
+  {name:'苔原',   col:'#9aa886', col2:'#8a997a', col3:'#c2c8c4', fert:0.2},
+  {name:'沼泽',   col:'#5c7050', col2:'#4e6144', col3:'#4e6e46', fert:0.55, trees:true},
+  {name:'火山沃土',col:'#4a4348', col2:'#3e383d', col3:'#6e5a52', fert:1.35},
+  {name:'焦土',   col:'#6e6259', col2:'#5d534c', col3:'#7a746c', fert:0.18},
+  {name:'河流',   col:'#2a6ea8', col2:'#3a7fb8', col3:'#3a7fb8', water:true, fert:0},
+  {name:'绿洲',   col:'#3aa87a', col2:'#2f8f68', col3:'#4fc08c', water:true, fert:1.3},
+  {name:'湖泊',   col:'#1e6ba0', col2:'#2a80b8', col3:'#2a80b8', water:true, fert:0},
 ];
 
 // ---- 作物(按地形) ----

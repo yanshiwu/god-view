@@ -233,12 +233,26 @@ function bakeAll(){
 function bakeTile(x,y){
   const i = y*WORLD_W+x, t = W.T[i], px=x*TILE, py=y*TILE, c=tctx;
   const info = TERR[t], h = hash2(x,y), h2 = hash2(x+91,y+37);
-  c.fillStyle = h>.5 ? info.col : info.col2;
+  // 三阶色阶 + 有序抖动(hash 混合出自然过渡)
+  const h3 = hash2(x+7, y+13);
+  c.fillStyle = h>.66 ? info.col : h<.33 ? info.col2 : (info.col3||info.col);
   c.fillRect(px,py,TILE,TILE);
+  if (info.col3 && h3>.62 && h3<.7){ c.fillStyle=info.col3; c.fillRect(px+((h*9)|0), py+((h2*9)|0), 3, 2); }
   if (info.water){ // 水下渐变
-    c.fillStyle = t===TER.DEEP ? 'rgba(4,16,32,.35)' : 'rgba(230,240,255,.10)';
+    c.fillStyle = t===TER.DEEP ? 'rgba(4,16,32,.35)' : t===TER.LAKE ? 'rgba(10,30,60,.22)' : 'rgba(230,240,255,.10)';
     c.fillRect(px,py,TILE,TILE);
     if (h>.7){ c.fillStyle='rgba(255,255,255,.10)'; c.fillRect(px+3+(h2*8|0), py+4+(h*5|0), 5,1); }
+    // 岸线泡沫:邻格是陆地则沿边画白色浪沫
+    const landN = y>0 && !TERR[W.T[i-WORLD_W]].water;
+    const landS = y<WORLD_H-1 && !TERR[W.T[i+WORLD_W]].water;
+    const landW = x>0 && !TERR[W.T[i-1]].water;
+    const landE = x<WORLD_W-1 && !TERR[W.T[i+1]].water;
+    c.fillStyle = 'rgba(230,245,255,.5)';
+    if (landN) c.fillRect(px, py, TILE, 1.2);
+    if (landS) c.fillRect(px, py+TILE-1.2, TILE, 1.2);
+    if (landW) c.fillRect(px, py, 1.2, TILE);
+    if (landE) c.fillRect(px+TILE-1.2, py, 1.2, TILE);
+    if ((landN||landW) && h>.4){ c.fillStyle='rgba(230,245,255,.35)'; c.fillRect(px+2+(h2*6|0), py+2+(h*6|0), 2.4, 1); }
   } else {
     // 陆地细节纹理
     c.fillStyle = 'rgba(0,0,0,.08)';
@@ -259,37 +273,83 @@ function bakeTile(x,y){
         c.beginPath(); c.moveTo(px+5.2,py+pk-1.6); c.lineTo(px+7,py+pk-4.2); c.lineTo(px+8.8,py+pk-1.6); c.closePath(); c.fill();
       }
     }
-    if (t===TER.DESERT && h>.5){ c.fillStyle='rgba(255,255,255,.10)'; c.fillRect(px+1,py+(h2*12|0),9,1); }
+    if (t===TER.DESERT && h>.5){ // 沙丘波纹:两道弧线
+      c.fillStyle='rgba(255,255,255,.12)';
+      c.fillRect(px+1,py+(h2*12|0),9,1);
+      if (h2>.55){ c.fillStyle='rgba(0,0,0,.06)'; c.fillRect(px+2,py+(h2*10|0)+2,7,1); }
+    }
+    if ((t===TER.GRASS) && h>.82){ // 野花
+      c.fillStyle = h2>.5 ? '#e8c84a' : '#d87a8a';
+      c.fillRect(px+2+(h2*8|0), py+3+(h*7|0), 1.2, 1.2);
+    }
+    if ((t===TER.GRASS||t===TER.TUNDRA) && h2>.86){ // 草簇:三笔小草
+      c.strokeStyle='rgba(30,60,20,.35)'; c.lineWidth=.6;
+      const gx=px+3+(h*7|0), gy=py+9;
+      c.beginPath();
+      c.moveTo(gx,gy); c.lineTo(gx-1,gy-2.4);
+      c.moveTo(gx+1,gy); c.lineTo(gx+1.4,gy-2.8);
+      c.moveTo(gx+2,gy); c.lineTo(gx+3,gy-2.2);
+      c.stroke();
+    }
+    if (t===TER.RUBBLE && h>.5){ // 卵石
+      c.fillStyle='rgba(200,195,185,.35)';
+      c.beginPath(); c.arc(px+3+(h2*7|0), py+4+(h*6|0), 1.3, 0, 7); c.fill();
+    }
     if (t===TER.BASALT){ c.fillStyle='rgba(255,255,255,.07)';
       if (h>.4) c.fillRect(px+(h2*9|0),py+(h*9|0),3,1); }
     if (t===TER.RUBBLE){ c.fillStyle='rgba(0,0,0,.25)';
       c.fillRect(px+(h2*8|0),py+(h*8|0),4,3); }
   }
-  // 树木
+  // 树木:阔叶圆冠 / 针叶尖塔,带落影与高光
   const tr = W.TR[i];
   for (let k=0;k<tr;k++){
     const tx = px + 2 + hash2(x*3+k, y*7)*9, ty = py + 2 + hash2(x*5, y*11+k)*9;
+    const pine = hash2(x+k*13, y-k*7) > .6; // 针叶树
     const dark = t===TER.SWAMP;
-    c.fillStyle = dark? '#3a5232' : '#31582a';
-    c.beginPath(); c.arc(tx, ty+1, 2.6, 0, 7); c.fill();
-    c.fillStyle = dark? '#4e6b40' : '#417a36';
-    c.beginPath(); c.arc(tx-.6, ty-.3, 2.0, 0, 7); c.fill();
+    // 落影(AO)
+    c.fillStyle='rgba(0,0,0,.18)';
+    c.beginPath(); c.ellipse(tx+1.4, ty+2.6, 2.8, 1.1, 0, 0, 7); c.fill();
+    if (pine){
+      c.fillStyle = dark? '#2e4a2e' : '#28502e';
+      c.beginPath(); c.moveTo(tx, ty-4.6); c.lineTo(tx+2.4, ty+2); c.lineTo(tx-2.4, ty+2); c.closePath(); c.fill();
+      c.fillStyle = dark? '#42603c' : '#3a6c3c';
+      c.beginPath(); c.moveTo(tx, ty-4.2); c.lineTo(tx+1.4, ty-.4); c.lineTo(tx-1.4, ty-.4); c.closePath(); c.fill();
+    } else {
+      c.fillStyle = dark? '#3a5232' : '#31582a';
+      c.beginPath(); c.arc(tx, ty+1, 2.6, 0, 7); c.fill();
+      c.fillStyle = dark? '#4e6b40' : '#417a36';
+      c.beginPath(); c.arc(tx-.6, ty-.3, 2.0, 0, 7); c.fill();
+      c.fillStyle='rgba(220,240,180,.25)'; // 叶面高光
+      c.beginPath(); c.arc(tx-1, ty-1, .8, 0, 7); c.fill();
+    }
   }
-  // 浆果丛
+  // 浆果丛(烘焙到瓦片画布)
   if (W.BERRY && W.BERRY[i]){
-    ctx.fillStyle='#4a7a3a';
-    ctx.beginPath(); ctx.arc(px+7,py+8,3.4,0,7); ctx.fill();
-    ctx.fillStyle='#c04a5a';
-    for(let k=0;k<3;k++) { ctx.beginPath(); ctx.arc(px+5.4+k*1.7, py+7+(k%2)*1.4, .7, 0, 7); ctx.fill(); }
+    c.fillStyle='rgba(0,0,0,.15)';
+    c.beginPath(); c.ellipse(px+7.6, py+10.6, 3.2, 1.1, 0, 0, 7); c.fill();
+    c.fillStyle='#4a7a3a';
+    c.beginPath(); c.arc(px+7,py+8,3.4,0,7); c.fill();
+    c.fillStyle='#5d924a';
+    c.beginPath(); c.arc(px+6.4,py+7.2,2.2,0,7); c.fill();
+    c.fillStyle='#c04a5a';
+    for(let k=0;k<3;k++) { c.beginPath(); c.arc(px+5.4+k*1.7, py+7+(k%2)*1.4, .7, 0, 7); c.fill(); }
   }
-  // 矿脉:岩上矿斑(铜橙/铁灰/金黄)
+  // 矿脉:岩上矿斑(铜橙/铁灰/金黄/煤黑/玉绿)
   if (W.ORE && W.ORE[i]){
     const oc = W.ORE[i]===1 ? '#d08a4a' : W.ORE[i]===2 ? '#9aa2ac' : W.ORE[i]===3 ? '#e8c84a' : W.ORE[i]===4 ? '#3a3a42' : '#4fae7f';
-    ctx.fillStyle='#6e6a66';
-    ctx.beginPath(); ctx.arc(px+7,py+8,3,0,7); ctx.fill();
-    ctx.fillStyle=oc;
-    ctx.fillRect(px+5.4,py+6.6,1.4,1.4);
-    ctx.fillRect(px+7.6,py+8.2,1.2,1.2);
+    c.fillStyle='#6e6a66';
+    c.beginPath(); c.arc(px+7,py+8,3,0,7); c.fill();
+    c.fillStyle='rgba(0,0,0,.25)';
+    c.beginPath(); c.arc(px+7.8,py+8.8,2.4,0,7); c.fill();
+    c.fillStyle='#8a857f';
+    c.beginPath(); c.arc(px+6.4,py+7.2,2.2,0,7); c.fill();
+    c.fillStyle=oc;
+    c.fillRect(px+5.4,py+6.6,1.4,1.4);
+    c.fillRect(px+7.6,py+8.2,1.2,1.2);
+    if (W.ORE[i]===3 || W.ORE[i]===5){ // 金玉闪光
+      c.fillStyle='rgba(255,255,255,.7)';
+      c.fillRect(px+5.6, py+6.7, .6, .6);
+    }
   }
   // 远古遗迹:倾颓的石柱与残碑
   if (W.RUIN && W.RUIN[i]){

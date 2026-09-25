@@ -162,9 +162,11 @@ function drawFarms(x0,y0,x1,y1){
     const crop = CROPS[t] || CROPS[TER.GRASS];
     const st = W.FS ? W.FS[i] : 3;
     const px=x*TILE, py=y*TILE;
-    // 土壤底色 + 垄沟
+    // 土壤底色 + 垄沟 + 田埂描边
     ctx.fillStyle = st===0 ? '#7a6647' : '#8a744a';
     ctx.fillRect(px+1,py+1,TILE-2,TILE-2);
+    ctx.strokeStyle='rgba(70,52,30,.4)'; ctx.lineWidth=.7;
+    ctx.strokeRect(px+.8,py+.8,TILE-1.6,TILE-1.6);
     if (t===TER.HILL){
       // 梯田:层层同心弧
       ctx.strokeStyle = 'rgba(60,45,20,.35)'; ctx.lineWidth=1;
@@ -352,6 +354,11 @@ function drawFauna(x0,y0,x1,y1){
       ctx.fillStyle='#4e4038';
       ctx.beginPath(); ctx.ellipse(px,py+bob*.5,2.8,1.9,0,0,7); ctx.fill();
       ctx.beginPath(); ctx.arc(px+2.4,py-.4+bob*.5,1.3,0,7); ctx.fill();
+      // 獠牙与立起的耳朵
+      ctx.strokeStyle='#e8e0d0'; ctx.lineWidth=.6;
+      ctx.beginPath(); ctx.moveTo(px+3,py+.2+bob*.5); ctx.lineTo(px+3.8,py-.6+bob*.5); ctx.stroke();
+      ctx.fillStyle='#3a302a';
+      ctx.beginPath(); ctx.moveTo(px+1.8,py-1.6+bob*.5); ctx.lineTo(px+2,py-2.8+bob*.5); ctx.lineTo(px+2.8,py-1.7+bob*.5); ctx.fill();
     } else { // deer
       ctx.fillStyle='rgba(0,0,0,.22)';
       ctx.beginPath(); ctx.ellipse(px,py+2.6,3.2,1.4,0,0,7); ctx.fill();
@@ -360,8 +367,21 @@ function drawFauna(x0,y0,x1,y1){
       ctx.beginPath(); ctx.arc(px+2.6,py-2.6+bob,1.4,0,7); ctx.fill();
       ctx.strokeStyle='#7a5636'; ctx.lineWidth=.8;
       ctx.beginPath(); ctx.moveTo(px+2.8,py-3.6+bob); ctx.lineTo(px+3.6,py-5+bob); ctx.stroke();
+      // 雄鹿之角:分叉双角
+      ctx.strokeStyle='#5f4426'; ctx.lineWidth=.7;
+      ctx.beginPath();
+      ctx.moveTo(px+2.4,py-3.8+bob); ctx.lineTo(px+1.6,py-5.4+bob); ctx.moveTo(px+2,py-4.6+bob); ctx.lineTo(px+2.8,py-5.6+bob);
+      ctx.moveTo(px+3.2,py-3.8+bob); ctx.lineTo(px+4,py-5.2+bob); ctx.moveTo(px+3.6,py-4.6+bob); ctx.lineTo(px+3,py-5.5+bob);
+      ctx.stroke();
+      // 四腿交替步态
       ctx.strokeStyle='#8a6642'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(px-1,py+.6); ctx.lineTo(px-1,py+2.6); ctx.moveTo(px+1,py+.6); ctx.lineTo(px+1,py+2.6); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(px-1,py+.6); ctx.lineTo(px-1+Math.sin(T_*7+h.ph), py+2.6);
+      ctx.moveTo(px+1,py+.6); ctx.lineTo(px+1-Math.sin(T_*7+h.ph), py+2.6);
+      ctx.stroke();
+      // 尾巴
+      ctx.fillStyle='rgba(240,230,210,.8)';
+      ctx.beginPath(); ctx.arc(px-3,py-1.6+bob,.7,0,7); ctx.fill();
     }
   }
 }
@@ -644,15 +664,23 @@ function drawHouse(x,y,sc,st,era,k,s){
       for (let wy=-h+3; wy<-2; wy+=3.4) for (let wx=-2.4; wx<2.4; wx+=2.4)
         if (hash2(k*17+wx,wy)> .3) ctx.fillRect(wx,wy,1.3,1.8);
     }
-  } else if (s.level>=3){ // 多层建筑
+  } else if (s.level>=3){ // 多层建筑:投影+门+窗
+    ctx.fillStyle='rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(1,4,5,1.6,0,0,7); ctx.fill();
     ctx.fillStyle=st[0]; ctx.fillRect(-3.5,-7,7,7);
     ctx.fillStyle=shade(s.col||'#c9a53f',.85); ctx.fillRect(-4,-8,8,2);
     ctx.fillStyle='rgba(30,25,20,.55)'; ctx.fillRect(-1,-4,2,4);
+    ctx.fillStyle='rgba(40,60,80,.75)'; ctx.fillRect(-2.6,-5.6,1.6,1.8); ctx.fillRect(1,-5.6,1.6,1.8);
+    ctx.fillStyle='rgba(255,255,255,.12)'; ctx.fillRect(-3.5,-7,7,1);
   } else if (s.level===0){ // 帐篷
     ctx.fillStyle=shade(s.col||'#b98a5e',.8);
     ctx.beginPath(); ctx.moveTo(0,-5.5); ctx.lineTo(4,3); ctx.lineTo(-4,3); ctx.closePath(); ctx.fill();
-  } else { // 小屋
+  } else { // 小屋:投影+木门+小窗+屋顶瓦纹
+    ctx.fillStyle='rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(1,3,4,1.3,0,0,7); ctx.fill();
     ctx.fillStyle=st[0]; ctx.fillRect(-3.2,-3.4,6.4,5.4);
+    ctx.fillStyle='rgba(0,0,0,.28)'; ctx.fillRect(-.6,-.9,1.5,2.9); // 门
+    ctx.fillStyle='rgba(40,60,80,.8)'; ctx.fillRect(-2.4,-2,1.4,1.4); // 窗
+    ctx.fillStyle=st[1];
+    for(let rv=-3;rv<1.6;rv+=1.1) ctx.fillRect(-3.2,rv,6.4,.5); // 瓦纹
     ctx.fillStyle=shade(s.col||'#c9a53f',.85);
     ctx.beginPath(); ctx.moveTo(-4,-3.2); ctx.lineTo(0,-7.5); ctx.lineTo(4,-3.2); ctx.closePath(); ctx.fill();
     if (era>=6){ ctx.fillStyle=`rgba(255,220,120,${.4+.3*Math.sin(T_*2+k)})`; ctx.fillRect(-.8,-2.6,1.6,1.6); }
@@ -731,8 +759,9 @@ function drawWalkers(){
       continue;
     }
     const bob = Math.sin(T_*8+w.ph)*.6;
+    const stride = Math.sin(T_*8+w.ph); // 步态
     ctx.fillStyle='rgba(0,0,0,.3)';
-    ctx.beginPath(); ctx.ellipse(w.x, w.y+2.4, 1.8, .9, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(w.x+1, w.y+2.4, 1.8, .9, 0, 0, 7); ctx.fill();
     // 族人穿部落色,职业由工具区分;草原部族骑马
     const homeS = G.settlements[w.home];
     if (homeS && homeS.geo==='grass' && G.era>=3 && (w.kind==='walk'||w.kind==='hunt')){
@@ -747,6 +776,17 @@ function drawWalkers(){
       ctx.moveTo(w.x+2.2, w.y+2); ctx.lineTo(w.x+2.6, w.y+3.8);
       ctx.stroke();
     }
+    // 摆动的双腿(走路的生命感)
+    ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=.7;
+    ctx.beginPath();
+    ctx.moveTo(w.x, w.y+bob+.8); ctx.lineTo(w.x+stride*.9, w.y+bob+2.2);
+    ctx.moveTo(w.x, w.y+bob+.8); ctx.lineTo(w.x-stride*.9, w.y+bob+2.2);
+    ctx.stroke();
+    ctx.fillStyle = homeS && homeS.col ? homeS.col : col;
+    ctx.beginPath(); ctx.arc(w.x, w.y+bob, 1.9, 0, 7); ctx.fill();
+    // 衣带:腰间一道部族深色
+    ctx.fillStyle='rgba(0,0,0,.2)';
+    ctx.fillRect(w.x-1.7, w.y+bob-.2, 3.4, .7);
     ctx.fillStyle = homeS && homeS.col ? homeS.col : col;
     ctx.beginPath(); ctx.arc(w.x, w.y+bob, 1.9, 0, 7); ctx.fill();
     ctx.fillStyle = G.era>=3 ? '#e8d5b5' : '#8a6a48';
@@ -830,12 +870,18 @@ function drawFires(){
   for (const [i,f] of G.fires){
     const px=f.x*TILE+TILE/2, py=f.y*TILE+TILE/2;
     const fl = Math.sin(T_*11+f.x*3)*.5+.5;
-    ctx.fillStyle=`rgba(255,${90+fl*90|0},20,${.75})`;
+    // 外层柔光
+    const g = ctx.createRadialGradient(px,py,1,px,py,14);
+    g.addColorStop(0,`rgba(255,150,40,${.28+fl*.1})`); g.addColorStop(1,'rgba(255,120,20,0)');
+    ctx.fillStyle=g; ctx.fillRect(px-14,py-14,28,28);
+    ctx.fillStyle=`rgba(220,${60+fl*70|0},10,${.8})`;
     ctx.beginPath();
     ctx.moveTo(px-4, py+3); ctx.quadraticCurveTo(px-3, py-2-fl*4, px, py-5-fl*4);
     ctx.quadraticCurveTo(px+3, py-2-fl*3, px+4, py+3); ctx.closePath(); ctx.fill();
-    ctx.fillStyle=`rgba(255,220,90,${.7})`;
-    ctx.beginPath(); ctx.arc(px, py+1, 1.6+fl, 0, 7); ctx.fill();
+    ctx.fillStyle=`rgba(255,180,60,${.8})`;
+    ctx.beginPath(); ctx.arc(px, py+1, 2.4+fl, 0, 7); ctx.fill();
+    ctx.fillStyle=`rgba(255,235,140,${.9})`;
+    ctx.beginPath(); ctx.arc(px, py+1.4, 1.3+fl*.8, 0, 7); ctx.fill();
     if (Math.random()<.12) FX.add({x:px,y:py-3,vx:(Math.random()-.5)*10,vy:-24-Math.random()*20,
       life:0,max:.7,type:'spark2',col:'#ffb35c',size:1.4});
     if (Math.random()<.05) FX.smoke(px,py-6,1,'rgba(70,60,55,.45)');
@@ -1011,6 +1057,13 @@ function drawNight(x0,y0,x1,y1){
   const day = (T_%150)/150;
   const n = Math.max(0, Math.sin((day-.5)*Math.PI*2)*-.5+.5); // 0白天 → 1深夜
   nightF = n;
+  if (n<.03 && n>.0001){ // 黄昏暖色温
+    const dusk = Math.min(1, n/.12) * (1-n/.12>0?1:0);
+    if (n < .12){
+      ctx.fillStyle=`rgba(255,140,60,${(.12-n)*2.2})`;
+      ctx.fillRect(x0*TILE, y0*TILE, (x1-x0+1)*TILE, (y1-y0+1)*TILE);
+    }
+  }
   if (n<.03) return;
   ctx.fillStyle=`rgba(10,16,40,${n*.5})`;
   ctx.fillRect(x0*TILE, y0*TILE, (x1-x0+1)*TILE, (y1-y0+1)*TILE);
