@@ -18,7 +18,7 @@ const SEASONS = [
 const POWER_MAX = 100;
 
 // ---- 地形 ----
-const TER = { DEEP:0, SEA:1, BEACH:2, GRASS:3, FOREST:4, HILL:5, MOUNT:6, PEAK:7, DESERT:8, TUNDRA:9, SWAMP:10, BASALT:11, RUBBLE:12, RIVER:13, OASIS:14 };
+const TER = { DEEP:0, SEA:1, BEACH:2, GRASS:3, FOREST:4, HILL:5, MOUNT:6, PEAK:7, DESERT:8, TUNDRA:9, SWAMP:10, BASALT:11, RUBBLE:12, RIVER:13, OASIS:14, LAKE:15 };
 const TERR = [
   {name:'深海',   col:'#0a2c4a', col2:'#0d3860', water:true,  fert:0},
   {name:'浅海',   col:'#155d8a', col2:'#1d7bb0', water:true,  fert:0.08},
@@ -35,6 +35,7 @@ const TERR = [
   {name:'焦土',   col:'#6e6259', col2:'#5d534c', fert:0.18},
   {name:'河流',   col:'#2a6ea8', col2:'#3a7fb8', water:true, fert:0},
   {name:'绿洲',   col:'#3aa87a', col2:'#2f8f68', water:true, fert:1.3},
+  {name:'湖泊',   col:'#1e6ba0', col2:'#2a80b8', water:true, fert:0},
 ];
 
 // ---- 作物(按地形) ----

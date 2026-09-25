@@ -151,6 +151,34 @@ function genWorld(seed){
       }
     }
   }
+  // ---- 内陆湖:群山环抱的低地蓄水成湖,湖中鱼群 ----
+  let lakeN = 0;
+  for (let n=0;n<6000 && lakeN<22;n++){
+    const x = 6+((RNG()*(WORLD_W-12))|0), y = 6+((RNG()*(WORLD_H-12))|0);
+    const i0 = y*WORLD_W+x;
+    const e = W.E[i0];
+    if (e < .42 || e > .62) continue;
+    // 8 格内不得临海(内陆湖)
+    let coastal = false;
+    for (let dy=-8;dy<=8 && !coastal;dy++) for (let dx=-8;dx<=8;dx++){
+      const x2=x+dx, y2=y+dy;
+      if (!inW(x2,y2)) continue;
+      const t2 = W.T[y2*WORLD_W+x2];
+      if (t2===TER.SEA || t2===TER.DEEP){ coastal=true; break; }
+    }
+    if (coastal) continue;
+    const rad = 1.6 + RNG()*2.2;
+    for (let dy=-4;dy<=4;dy++) for (let dx=-4;dx<=4;dx++){
+      const x2=x+dx, y2=y+dy;
+      if (!inW(x2,y2)) continue;
+      if (dx*dx+dy*dy <= rad*rad && W.E[y2*WORLD_W+x2] < .75){
+        const i2=y2*WORLD_W+x2;
+        if (W.T[i2]!==TER.RIVER){ W.T[i2]=TER.LAKE; W.TR[i2]=0; W.FARM[i2]=0; }
+      }
+    }
+    lakeN++;
+  }
+  bakeAll();
   // ---- 远古遗迹:先于人类存在的谜(发现本身即奖励) ----
   W.RUIN = new Uint8Array(WORLD_W*WORLD_H);
   let ruinN = 0;
@@ -178,12 +206,12 @@ function genWorld(seed){
   // ---- 矿脉:群山中的铜铁金 ----
   W.ORE = new Uint8Array(WORLD_W*WORLD_H); // 1铜 2铁 3金
   let oreN=0;
-  for (let n=0;n<8000 && oreN<70;n++){
+  for (let n=0;n<8000 && oreN<130;n++){
     const x=(RNG()*WORLD_W)|0, y=(RNG()*WORLD_H)|0, i=y*WORLD_W+x;
     const t=W.T[i];
     if ((t===TER.MOUNT || t===TER.HILL || t===TER.PEAK) && W.ORE[i]===0){
       const r2=RNG();
-      W.ORE[i] = r2<.55 ? 1 : r2<.87 ? 2 : 3;
+      W.ORE[i] = r2<.40 ? 1 : r2<.68 ? 2 : r2<.82 ? 3 : r2<.94 ? 4 : 5;
       oreN++;
     }
   }
@@ -256,7 +284,7 @@ function bakeTile(x,y){
   }
   // 矿脉:岩上矿斑(铜橙/铁灰/金黄)
   if (W.ORE && W.ORE[i]){
-    const oc = W.ORE[i]===1 ? '#d08a4a' : W.ORE[i]===2 ? '#9aa2ac' : '#e8c84a';
+    const oc = W.ORE[i]===1 ? '#d08a4a' : W.ORE[i]===2 ? '#9aa2ac' : W.ORE[i]===3 ? '#e8c84a' : W.ORE[i]===4 ? '#3a3a42' : '#4fae7f';
     ctx.fillStyle='#6e6a66';
     ctx.beginPath(); ctx.arc(px+7,py+8,3,0,7); ctx.fill();
     ctx.fillStyle=oc;

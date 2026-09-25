@@ -230,7 +230,7 @@ function castPower(id, wx, wy){ // wx,wy = 格坐标(浮点)
       const i2=y2*WORLD_W+x2;
       if (!W.ORE[i2]){
         const r2=Math.random();
-        W.ORE[i2] = r2<.5 ? 1 : r2<.85 ? 2 : 3;
+        W.ORE[i2] = r2<.40 ? 1 : r2<.68 ? 2 : r2<.82 ? 3 : r2<.94 ? 4 : 5;
         bakeTile(x2,y2);
         log(`⛏️ 群山中显现${W.ORE[i2]===1?'铜':W.ORE[i2]===2?'铁':'金'}矿脉!`, 'lg-god');
       } else toast('此处已有矿脉', 2.5);

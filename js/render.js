@@ -22,7 +22,7 @@ function clampCam(){
 }
 
 // ---- 地形查找 ----
-function findTileNear(s, pred, r){
+function findTileNear(s, pred, r){ // pred 需含 LAKE 的水域由调用方决定
   const cx=s.x|0, cy=s.y|0;
   for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++){
     const x=cx+dx, y=cy+dy;
@@ -444,16 +444,16 @@ function drawSettlements(){
     ctx.beginPath(); ctx.moveTo(fx, fy-8); ctx.lineTo(fx+6+Math.sin(T_*3+s.id)*1.2, fy-6.5); ctx.lineTo(fx, fy-5); ctx.closePath(); ctx.fill();
 
     const style = HOUSE_STYLE[era];
-    // 规划布局:内环5座+外环扩展,围绕中央广场有序排布(朝向一致)
+    // 规划布局:行列网格(每行3座,东西成排、南北成巷,间距一致)
     const n = [3,5,9,14,18][s.level];
+    const cols = n<=5 ? 3 : 4;
+    const sp = 8.5 + s.level*1.2; // 房距
     for (let k=0;k<n;k++){
-      const ring = k<5 ? 1 : 2;
-      const idx = ring===1 ? k : k-5;
-      const cnt = ring===1 ? Math.min(5,n) : Math.ceil((n-5)/2);
-      const a = (idx/cnt)*Math.PI*2 + s.id*.6 + (ring-1)*.35;
-      const rr = ring===1 ? 5+s.level*2.5 : 11+s.level*3.5;
-      const bx = tx+Math.cos(a)*rr, by = ty+Math.sin(a)*rr;
-      const sc = (ring===1?1:.82) + (s.level>=3?.25:0);
+      const row = (k/cols)|0, col = k%cols;
+      const rowCount = Math.min(cols, n-row*cols);
+      const bx = tx + (col - (rowCount-1)/2) * sp;           // 行内居中
+      const by = ty + 6 + row * (sp*.72);                     // 成排向南生长
+      const sc = 1 + (s.level>=3?.25:0) - (row>1?.08:0);
       drawHouse(bx,by,sc,style, era, k, s);
     }
     // 中央广场:时代越晚越规整(土坪→石板十字路)

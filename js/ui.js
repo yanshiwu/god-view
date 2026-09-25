@@ -159,13 +159,14 @@ function fillTribe(){
   const r = lv.r + 4;
   const cx = s.x|0, cy = s.y|0;
   // 附近资源清点
-  let berry=0, oreC=0, oreI=0, oreG=0, water=0, forest=0;
+  let berry=0, oreC=0, oreI=0, oreG=0, oreK=0, oreJ=0, water=0, forest=0;
   for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++){
     const x=cx+dx, y=cy+dy;
     if (!inW(x,y)) continue;
     const i=y*WORLD_W+x;
     if (W.BERRY && W.BERRY[i]) berry++;
     if (W.ORE && W.ORE[i]===1) oreC++; else if (W.ORE&&W.ORE[i]===2) oreI++; else if (W.ORE&&W.ORE[i]===3) oreG++;
+    else if (W.ORE&&W.ORE[i]===4) oreK++; else if (W.ORE&&W.ORE[i]===5) oreJ++;
     if (W.T[i]===TER.RIVER||W.T[i]===TER.OASIS||W.T[i]===TER.SEA) water++;
     if (W.T[i]===TER.FOREST) forest++;
   }
@@ -221,7 +222,7 @@ function fillTribe(){
     ['👥 人口', `${fmt(s.pop)} / ${fmt(lv.cap)}(房屋 ${s.houses||Math.ceil(s.pop/4)} 间)`],
     ['🌾 存粮', `${fmt(s.store)} / ${fmt(storeCap(s))}(季收 ${fmt(s.income||0)} · 季食 ${fmt(s.eat||0)})`],
     ['🌱 农田', `${farmN} 块,待收 ${ripe} 块:${cropStr}`],
-    ['⛏ 矿脉', `铜 ${oreC} · 铁 ${oreI} · 金 ${oreG}(领地内)`],
+    ['⛏ 矿脉', `铜 ${oreC} · 铁 ${oreI} · 金 ${oreG} · 煤 ${oreK} · 玉 ${oreJ}(领地内)`],
     ['🫐 浆果丛', `${berry} 处 · 林地 ${forest} 块 · 水域 ${water} 块`],
     ['🧑‍🌾 劳作', jobStr],
     ['🧬 部落特质', traitStr],

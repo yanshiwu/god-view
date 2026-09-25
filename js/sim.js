@@ -80,7 +80,7 @@ function detectGeo(s){
     const x=(s.x+dx)|0, y=(s.y+dy)|0;
     if (!inW(x,y)) continue;
     const t=tAt(x,y);
-    if (t===TER.RIVER) river++;
+    if (t===TER.RIVER || t===TER.LAKE) river++;
     else if (t===TER.SEA || t===TER.DEEP) sea++;
     else if (t===TER.GRASS) grass++;
     else if (t===TER.FOREST) forest++;
@@ -105,7 +105,7 @@ function probeGeo(x,y){
     const xx=x+dx, yy=y+dy;
     if (!inW(xx,yy)) continue;
     const t=tAt(xx,yy);
-    if (t===TER.RIVER) river++;
+    if (t===TER.RIVER || t===TER.LAKE) river++;
     else if (t===TER.SEA||t===TER.DEEP) sea++;
     else if (t===TER.GRASS) grass++;
     else if (t===TER.FOREST) forest++;
@@ -392,12 +392,26 @@ function developFarms(s){
     if (inW(x,y) && W.FARM[y*WORLD_W+x]===s.id+1) have++;
   }
   if (have >= want) return;
-  for (let k=0;k<12 && have<want;k++){
-    const a=RNG()*Math.PI*2, d=1+RNG()*(r-1);
-    const x=(s.x+Math.cos(a)*d)|0, y=(s.y+Math.sin(a)*d)|0;
+  // 连片规划:由近及远扫描,优先与既有农田相邻(成块成排),次选平整草地
+  const cands = [];
+  for (const [dx,dy] of disk(r)){
+    const x=(s.x+dx)|0, y=(s.y+dy)|0;
     if (!inW(x,y)) continue;
     const i=y*WORLD_W+x, t=W.T[i];
-    if ((t===TER.GRASS || t===TER.BASALT || t===TER.SWAMP || t===TER.HILL || t===TER.TUNDRA || t===TER.DESERT) && !W.FARM[i] && W.LAVA[i]<=0 && W.SC[i]<.3){
+    if (!((t===TER.GRASS || t===TER.BASALT || t===TER.SWAMP || t===TER.HILL || t===TER.TUNDRA || t===TER.DESERT) && !W.FARM[i] && W.LAVA[i]<=0 && W.SC[i]<.3)) continue;
+    let nb=0;
+    for (const [ox,oy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const j=(y+oy)*WORLD_W+(x+ox);
+      if (inW(x+ox,y+oy) && W.FARM[j]===s.id+1) nb++;
+    }
+    const score = dx*dx+dy*dy - nb*30 - (t===TER.GRASS?6:0) + (t===TER.HILL?4:0);
+    cands.push({x,y,i,t,score,nb});
+  }
+  cands.sort((a,b)=>a.score-b.score);
+  for (let k=0;k<12 && have<want && cands.length;k++){
+    const c2 = cands.shift();
+    if (have>0 && c2.nb===0 && k<8) { cands.push(c2); continue; } // 前几块必须连片
+    const {x,y,i,t} = c2;
       W.FARM[i]=s.id+1; W.FS[i]=1; have++;
       if (!G.flags['crop_'+t]){
         G.flags['crop_'+t] = true;
@@ -409,7 +423,6 @@ function developFarms(s){
           log(`他们驯化了适合${TERR[t].name}的作物:${c.name}。`, 'lg-good');
         }
       }
-    }
   }
 }
 function knowledgeGain(){
@@ -840,9 +853,12 @@ function updateWalkers(dt){
         if (w.workT > 9){
           w.workT = 0;
           const ot = W.ORE[w.spot];
-          home.store = Math.min(storeCap(home), home.store + (ot===3?20:ot===2?14:10));
-          G.knowledge += 8 + G.era*30; G.counters.mined++; // 采矿催生冶炼知识
+          home.store = Math.min(storeCap(home), home.store + (ot===3?20:ot===2?14:ot===4?8:ot===5?12:10));
+          G.knowledge += 8 + G.era*30 + (ot===4? G.era*60 : 0) + (ot===5? 40 : 0);
+          G.counters.mined++; // 采矿催生冶炼知识
           if (ot===3) G.faith = Math.min(100, G.faith+.05);
+          if (ot===4) G.knowledge += 30;               // 煤:工业的食粮
+          if (ot===5){ G.faith = Math.min(100, G.faith+.08); G.morale = Math.min(100, G.morale+.05); } // 玉:礼天之美
           if (!G.flags.mineStory){
             G.flags.mineStory = true;
             const t = '他们凿开山岩,第一次触及大地深处的铜与铁。';
@@ -981,7 +997,7 @@ function updateWalkers(dt){
           const a = RNG()*Math.PI*2, dist = (12+RNG()*28)*TILE; // 扩张精神:远行 12~40 格
           w.tx = home.tx + Math.cos(a)*dist; w.ty = home.ty + Math.sin(a)*dist;
         } else {
-          const spot = findTileNear(home, t=>t===TER.FOREST||t===TER.RIVER||t===TER.OASIS, 14);
+          const spot = findTileNear(home, t=>t===TER.FOREST||t===TER.RIVER||t===TER.OASIS||t===TER.LAKE, 14);
           if (spot){ w.tx = spot.x*TILE+7; w.ty = spot.y*TILE+7; }
           else { const a = RNG()*Math.PI*2, dist=(6+RNG()*10)*TILE;
                  w.tx = home.tx + Math.cos(a)*dist; w.ty = home.ty + Math.sin(a)*dist; }
@@ -1515,7 +1531,7 @@ function spawnHerd(){
     else if (t===TER.FOREST) kind = RNG()<.22 ? 'wolf' : 'boar';
     else if (t===TER.HILL && RNG()<.3) kind='wolf';
     else if (t===TER.TUNDRA) kind = G.era<3 ? 'mammoth' : (RNG()<.5?'deer':null);
-    else if (t===TER.RIVER || t===TER.OASIS) kind='fish';
+    else if (t===TER.RIVER || t===TER.OASIS || t===TER.LAKE) kind='fish';
     else if (t===TER.SEA && nearLand(x,y)) kind='fish';
     if (!kind) continue;
     if (G.herds.some(h=>Math.hypot(h.x-x,h.y-y)<5)) continue;
