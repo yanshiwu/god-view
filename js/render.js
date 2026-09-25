@@ -501,6 +501,31 @@ function drawSettlements(){
       ctx.fillStyle='#fff8e8';
       for(let k=0;k<3;k++) ctx.fillRect(sx2-3+k*2.4, sy2-1, 1.5, 2.4);
     }
+    if (era>=2 && s.level>=1 && s.armory){
+      // 武器作坊(东):锻炉 + 砧 + 火光
+      const ax2=tx+16, ay2=ty+3;
+      ctx.fillStyle='#6e5a44'; ctx.fillRect(ax2-4,ay2-2.5,8,5);
+      ctx.fillStyle='#3a3230'; ctx.fillRect(ax2-1,ay2-1,2.4,2.2); // 炉口
+      ctx.fillStyle=`rgba(255,${120+Math.sin(T_*7+s.id)*60|0},40,.75)`;
+      ctx.fillRect(ax2-.7,ay2-.8,1.8,1.4);
+      ctx.fillStyle='#8a8a92'; // 铁砧
+      ctx.fillRect(ax2+4.4,ay2-.6,2.4,1);
+      if (Math.random()<.05) FX.burst(ax2+5, ay2-1, 1, '#ffd86b', 18);
+    }
+    if (era>=5 && s.level>=2 && s.arsenal){
+      // 军工厂(北):双烟囱厂房,浓烟滚滚
+      const mx2=tx-2, my2=ty-22;
+      ctx.fillStyle='#5e5e66'; ctx.fillRect(mx2-8,my2-3,16,7);
+      ctx.fillStyle='#4a4a52'; ctx.fillRect(mx2-8,my2-4.5,16,1.8);
+      ctx.fillStyle='#3a3a40';
+      ctx.fillRect(mx2-6,my2-8,2,4); ctx.fillRect(mx2+3,my2-8,2,4);
+      if (Math.random()<.3){
+        FX.smoke(mx2-5, my2-9, 1.4, 'rgba(90,90,96,.5)');
+        FX.smoke(mx2+4, my2-9, 1.4, 'rgba(90,90,96,.5)');
+      }
+      ctx.fillStyle='#c9a53f'; // 厂徽:交叉剑
+      ctx.fillRect(mx2-1,my2-1.6,2,2);
+    }
     if (era>=2 && (s.geo==='forest'||s.geo==='grass'||s.geo==='tundra')){
       // 木料场(东南):堆叠原木
       const lx=tx+19, ly=ty+13;
@@ -698,9 +723,33 @@ function drawWalkers(){
     ctx.beginPath(); ctx.arc(w.x, w.y+bob, 1.9, 0, 7); ctx.fill();
     ctx.fillStyle = G.era>=3 ? '#e8d5b5' : '#8a6a48';
     ctx.beginPath(); ctx.arc(w.x, w.y+bob-2, 1, 0, 7); ctx.fill();
-    if (w.kind==='war'){ // 长矛
-      ctx.strokeStyle='#d8d0c0'; ctx.lineWidth=.7;
-      ctx.beginPath(); ctx.moveTo(w.x+1, w.y+bob); ctx.lineTo(w.x+3.4, w.y+bob-3.4); ctx.stroke();
+    if (w.kind==='war'){ // 武器随时代:石矛→骨弓→青铜剑→火枪
+      const we = G.era;
+      if (we<=1){ // 木矛/石斧
+        ctx.strokeStyle='#d8d0c0'; ctx.lineWidth=.7;
+        ctx.beginPath(); ctx.moveTo(w.x+1, w.y+bob); ctx.lineTo(w.x+3.4, w.y+bob-3.4); ctx.stroke();
+      } else if (we<=2){ // 骨弓
+        ctx.strokeStyle='#c9b183'; ctx.lineWidth=.7;
+        ctx.beginPath(); ctx.arc(w.x+2.6, w.y+bob-1, 1.9, -1.2, 1.2); ctx.stroke();
+        ctx.strokeStyle='#e8e0d0'; ctx.lineWidth=.4;
+        ctx.beginPath(); ctx.moveTo(w.x+3.2, w.y+bob-2.6); ctx.lineTo(w.x+1.4, w.y+bob-.2); ctx.stroke();
+      } else if (we<=4){ // 剑与盾
+        ctx.strokeStyle='#e8c86a'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(w.x+1.2, w.y+bob); ctx.lineTo(w.x+3.2, w.y+bob-3); ctx.stroke();
+        ctx.fillStyle='#8a6a48';
+        ctx.beginPath(); ctx.arc(w.x-2.2, w.y+bob-.4, 1.5, 0, 7); ctx.fill();
+        ctx.strokeStyle='#d8b545'; ctx.lineWidth=.5;
+        ctx.beginPath(); ctx.arc(w.x-2.2, w.y+bob-.4, 1.5, 0, 7); ctx.stroke();
+      } else { // 火枪(后时代通用,电气+加刺刀)
+        ctx.strokeStyle='#4e4038'; ctx.lineWidth=1.1;
+        ctx.beginPath(); ctx.moveTo(w.x-.5, w.y+bob-1); ctx.lineTo(w.x+3.8, w.y+bob-2.4); ctx.stroke();
+        ctx.fillStyle='#c9a53f';
+        ctx.fillRect(w.x+3.4, w.y+bob-2.7, 1.1, .9);
+        if (Math.sin(T_*6+w.ph)>.86){ // 开火闪光
+          ctx.fillStyle='#ffd86b';
+          ctx.beginPath(); ctx.arc(w.x+4.6, w.y+bob-2.5, 1.3, 0, 7); ctx.fill();
+        }
+      }
     } else if (w.kind==='hunt'){ // 猎弓
       ctx.strokeStyle='#c9b183'; ctx.lineWidth=.7;
       ctx.beginPath(); ctx.arc(w.x+2.4, w.y+bob-1, 1.7, -1.2, 1.2); ctx.stroke();

@@ -161,11 +161,33 @@ function tickSettlement(s, S){
   s.store = Math.max(0, Math.min(storeCap(s), s.store + income - eat));
   s.income = income; s.eat = eat;
   if (s.store > storeCap(s)*.5 && s.pop < cap && S.growth > 0){
-    const g = ((0.0062*s.pop + .2) / (1 + s.level*.5)) * .25 * S.growth * (G.clim ? (G.clim.type==='cold'?.8:1.12) : 1);
+    // 灾后/战后生育潮:人口跌到历史峰值35%以下,生育翻倍,慢慢恢复元气
+    s.peakPop = Math.max(s.peakPop||s.pop, s.pop);
+    if (s.peakPop>10) s.peakPop *= .996;
+    const boom = s.pop < s.peakPop*.35 ? 2 : 1;
+    const g = ((0.0062*s.pop + .25) / (1 + s.level*.25)) * .25 * S.growth * boom * (G.clim ? (G.clim.type==='cold'?.8:1.12) : 1);
     s.pop += g; G.stats.born += g; s.store -= g*2;
     s.famine = false;
     // 房屋随人口而建(每4人一座,受时代规模限制)——房屋能抵御严寒与猛兽
     s.houses = Math.min(Math.ceil(s.pop/4), 6 + s.level*7);
+    // 武器作坊(火焰时代起,村庄即可建):锻造兵器,战力加成
+    s.armory = G.era>=2 && s.level>=1;
+    if (s.armory && !(s._armoryTold)){
+      s._armoryTold = true;
+      if (!G.flags.armoryStory){
+        G.flags.armoryStory = true;
+        const t = '【作坊】' + s.name + ' 的作坊里锻出了第一批兵器——匠人的炉火,从此日夜不熄。';
+        log(t, 'lg-story'); chron(t, 'culture');
+        G.knowledge += 80;
+      }
+    }
+    // 军工厂(工业化:城市级聚落):流水线造武器,战力大增,战争绞肉机化
+    s.arsenal = G.era>=5 && s.level>=2;
+    if (s.arsenal && !(s._arsenalTold)){
+      s._arsenalTold = true;
+      const t = '【军工厂】' + s.name + ' 的军工厂建成,流水线昼夜轰鸣——战争进入了工业化时代。';
+      log(t, 'lg-story'); chron(t, 'culture');
+    }
     // 生老病死:寿老与病故(粮食充足时也会有人走到生命尽头)
     const lifeBase = G.era>=2 ? .00018 : .00035; // 医学与温饱延年益寿
     const natd = s.pop * lifeBase * (G.clim&&G.clim.type==='cold'?1.6:1);
@@ -1052,14 +1074,19 @@ function startWar(A,B,opts={}){
   for (let k=0;k<n;k++)
     G.walkers.push({x:A.tx+rnd(-8,8), y:A.ty+rnd(-8,8), tx:B.tx+rnd(-10,10), ty:B.ty+rnd(-10,10),
       home:A.id, spd:17+RNG()*8, kind:'war', warKey:w.key, ph:RNG()*7});
+  const wep = WEAPON_NAMES[Math.min(G.era, WEAPON_NAMES.length-1)];
   if (desperate){
     toast(`🔥 倾国之战 · ${A.name} 为生存而战 → ${B.name}`, 4);
     chron(`${A.name} 粮尽,倾国之力扑向 ${B.name}`, 'war');
   } else {
     const scale = G.era>=5 ? '世界大战爆发' : G.era>=4 ? '青铜战车轰鸣' : '战鼓擂响';
-    log(`⚔️ ${A.name} 向 ${B.name} 宣战!${Math.round(sent)} 名战士踏上征途。`, 'lg-bad');
+    log(`⚔️ ${A.name} 向 ${B.name} 宣战!${Math.round(sent)} 名战士操着${wep}踏上征途。`, 'lg-bad');
     toast(`⚔️ ${scale} · ${A.name} → ${B.name}`, 4);
-    chron(`${A.name} 向 ${B.name} 宣战`, 'war');
+    chron(`${A.name} 以${wep}伐 ${B.name}`, 'war');
+  }
+  if (WEAPON_STORIES[G.era] && !G.flags['wstory'+G.era]){
+    G.flags['wstory'+G.era] = true;
+    chron('【战争演化】' + WEAPON_STORIES[G.era] + '。', 'war');
   }
   MUS.setTension(true);
   setTimeout(()=>MUS.setTension(G.fires.size>25 || G.iceT>0 || G.ashT>0), 8000);
@@ -1067,10 +1094,13 @@ function startWar(A,B,opts={}){
 function resolveWar(w, A, B){
   endWarWalkers(w);
   const terrainB = (B.level>=2 ? 1.35 : 1) * (G.era>=2 ? 1.12 : 1); // 栅栏与城墙
-  const atk = w.sent * (0.8+RNG()*.4) * (1+G.era*.15);
-  const def = B.pop * .55 * terrainB * (B.traits&&B.traits.martial?1.15:1) * (B.geo==='mountain'?1.1:1);
-  const defLoss = Math.min(B.pop*.85, atk*(0.5+RNG()*.5));
-  const atkLoss = Math.min(w.sent, def*(0.4+RNG()*.4));
+  // 作坊与军工厂:武器代差决定战场
+  const atk = w.sent * (0.8+RNG()*.4) * (1+G.era*.15) * (A.armory?1.12:1) * (A.arsenal?1.25:1);
+  const def = B.pop * .55 * terrainB * (B.traits&&B.traits.martial?1.15:1) * (B.geo==='mountain'?1.1:1)
+            * (B.armory?1.1:1) * (B.arsenal?1.2:1);
+  const grind = G.era>=5 ? 1.55 : G.era>=4 ? 1.2 : 1; // 工业化:绞肉机
+  const defLoss = Math.min(B.pop*.85, atk*(0.5+RNG()*.5)*grind);
+  const atkLoss = Math.min(w.sent, def*(0.4+RNG()*.4)*grind);
   B.pop -= defLoss; w.sent -= atkLoss;
   G.stats.deaths += defLoss + atkLoss;(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
   G.faith = Math.max(0, G.faith - 2.5);
@@ -1080,12 +1110,17 @@ function resolveWar(w, A, B){
   if (B.pop < 3){
     const absorbed = w.sent*.6;
     A.pop += absorbed;
-    log(`🔥 城破!${B.name} 的幸存者并入 ${A.name}。`, 'lg-bad');
+    log(`🔥 城破!${A.name} 的${WEAPON_NAMES[Math.min(G.era,8)]}踏平了 ${B.name},幸存者并入征服者。`, 'lg-bad');
     bigToast('⚔️ 城破', `${A.name} 吞并了 ${B.name}`);
+    chron(`${A.name} 以${WEAPON_NAMES[Math.min(G.era,8)]}灭 ${B.name}`, 'war');
     destroySettlement(B, 'war');
   } else {
-    log(`⚔️ ${A.name} 进攻 ${B.name},双方共损失 ${fmt(defLoss+atkLoss)} 人。`, 'lg-bad');
-    chron(`${A.name} 攻 ${B.name} 不克,双方共损 ${fmt(defLoss+atkLoss)} 人`, 'war');
+    log(`⚔️ ${A.name} 的${WEAPON_NAMES[Math.min(G.era,8)]}撞上 ${B.name} 的防线,双方共损失 ${fmt(defLoss+atkLoss)} 人。`, 'lg-bad');
+    chron(`${A.name} 攻 ${B.name} 不克(损失 ${fmt(defLoss+atkLoss)} 人)`, 'war');
+    if (G.era>=5 && defLoss+atkLoss > 400 && !G.flags.grindTold){
+      G.flags.grindTold = true;
+      chron('【总体战】工厂的产量取代了勇士的武勇——一代人在战壕里流尽了血。', 'doom');
+    }
     // 早期战争本质是袭掠:得手即抢粮而走
     if (G.era < 4 && !w.desperate && defLoss > B.pop*.25){
       const loot = B.store*.2;
