@@ -118,6 +118,7 @@ function render(dt){
     drawLifeProps(x0,y0,x1,y1);
     drawSettlements();
     drawWalkers();
+    drawWarArrows();
     drawFires();
     drawFloods();
     drawBoltsBeams();
@@ -126,6 +127,7 @@ function render(dt){
   drawMeteors();
   drawParticles('world');
   drawWeather(dt);
+  if (G && G.phase==='play') drawBirds();
   drawClouds();
   if (G){
     drawVolcanoGlow();
@@ -410,6 +412,23 @@ function drawRoads(){
   }
   const fade = Math.max(0, Math.min(1, (cam.z-.55)/.3));
   if (fade <= 0 || !roadCache.segs.length) return;
+  // 压实土路:宽底色 + 中线浅土 + 沿路砾点(比虚点更像被人踩出来的路)
+  ctx.globalAlpha = fade;
+  for (const [a,b] of roadCache.segs){
+    const mx=(a.tx+b.tx)/2 + Math.sin(a.id*2.1+b.id)*12, my=(a.ty+b.ty)/2 + Math.cos(a.id*1.7+b.id)*12;
+    ctx.strokeStyle='rgba(120,96,60,.5)'; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.moveTo(a.tx,a.ty); ctx.quadraticCurveTo(mx,my,b.tx,b.ty); ctx.stroke();
+    ctx.strokeStyle='rgba(150,124,80,.45)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(a.tx,a.ty); ctx.quadraticCurveTo(mx,my,b.tx,b.ty); ctx.stroke();
+    ctx.fillStyle='rgba(110,88,55,.4)';
+    for (let k=0;k<6;k++){
+      const t2=(k+hash2(a.id*7+k,b.id*3)) /6;
+      const qx=(1-t2)*(1-t2)*a.tx + 2*(1-t2)*t2*mx + t2*t2*b.tx;
+      const qy=(1-t2)*(1-t2)*a.ty + 2*(1-t2)*t2*my + t2*t2*b.ty;
+      ctx.fillRect(qx-1, qy-1, 1.6, 1.2);
+    }
+  }
+  ctx.globalAlpha = 1;
   ctx.setLineDash([2,5]);
   ctx.lineWidth = 1.3;
   for (const [a,b] of roadCache.segs){
@@ -476,14 +495,24 @@ function drawSettlements(){
       const sc = 1 + (s.level>=3?.25:0) - (row>1?.08:0);
       drawHouse(bx,by,sc,style, era, k, s);
     }
-    // 中央广场:时代越晚越规整(土坪→石板十字路)
+    // 中央广场:石板拼花圆心 + 十字路 + 篝火石圈
     if (era>=2){
-      ctx.strokeStyle = era>=4 ? 'rgba(150,140,120,.5)' : 'rgba(120,100,70,.45)';
+      ctx.fillStyle = era>=4 ? 'rgba(160,152,138,.55)' : 'rgba(140,118,84,.5)';
+      ctx.beginPath(); ctx.arc(tx,ty,3.2,0,7); ctx.fill();
+      ctx.strokeStyle = era>=4 ? 'rgba(170,160,145,.55)' : 'rgba(130,108,76,.5)';
       ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(tx-8-s.level*2, ty); ctx.lineTo(tx+8+s.level*2, ty);
-      ctx.moveTo(tx, ty-8-s.level*2); ctx.lineTo(tx, ty+8+s.level*2);
+      ctx.moveTo(tx-8-s.level*2, ty); ctx.lineTo(tx-4, ty);
+      ctx.moveTo(tx+4, ty); ctx.lineTo(tx+8+s.level*2, ty);
+      ctx.moveTo(tx, ty-8-s.level*2); ctx.lineTo(tx, ty-4);
+      ctx.moveTo(tx, ty+4); ctx.lineTo(tx, ty+8+s.level*2);
       ctx.stroke();
+      // 篝火石圈:八颗小石子围一圈
+      ctx.fillStyle='rgba(120,112,100,.8)';
+      for (let k2=0;k2<8;k2++){
+        const aa=k2/8*Math.PI*2;
+        ctx.beginPath(); ctx.arc(tx+Math.cos(aa)*4.6, ty+Math.sin(aa)*4.6, .8, 0, 7); ctx.fill();
+      }
     }
     // 城墙:火焰时代起立起木栅,青铜后为石墙(耶利哥式)
     if (era>=2){
@@ -655,6 +684,11 @@ function drawSettlements(){
 }
 function drawHouse(x,y,sc,st,era,k,s){
   ctx.save(); ctx.translate(x,y); ctx.scale(sc,sc);
+  // 山墙(侧面三角)增加体积感
+  if (s.level===1||s.level===2){
+    ctx.fillStyle='rgba(0,0,0,.14)';
+    ctx.beginPath(); ctx.moveTo(-3.2,-3.4); ctx.lineTo(-4.6,2); ctx.lineTo(-3.2,2); ctx.closePath(); ctx.fill();
+  }
   if (s.level>=4 && era>=6){ // 高楼
     const h = 12 + hash2(k*5,s.id)*16;
     ctx.fillStyle=st[0]; ctx.fillRect(-3.4,-h,6.8,h);
@@ -742,7 +776,7 @@ function drawWalkers(){
       }
       continue;
     }
-    if (w.kind==='cart'){ // 粮车:车轮+粮袋+推车人
+    if (w.kind==='cart'){ // 牛车:拉车的牛+车厢+赶车人
       ctx.fillStyle='rgba(0,0,0,.28)';
       ctx.beginPath(); ctx.ellipse(w.x, w.y+2.6, 5, 1.6, 0, 0, 7); ctx.fill();
       ctx.fillStyle='#7c5a34';
@@ -783,7 +817,10 @@ function drawWalkers(){
     ctx.moveTo(w.x, w.y+bob+.8); ctx.lineTo(w.x-stride*.9, w.y+bob+2.2);
     ctx.stroke();
     ctx.fillStyle = homeS && homeS.col ? homeS.col : col;
+    const shadeW = .85 + (w.ph%1)*.3; // 同族明度差异:布料新旧
     ctx.beginPath(); ctx.arc(w.x, w.y+bob, 1.9, 0, 7); ctx.fill();
+    ctx.fillStyle = hexA(homeS && homeS.col ? homeS.col : col, .35);
+    ctx.beginPath(); ctx.arc(w.x-stride*.4, w.y+bob-.6, 1.9, Math.PI*.9, Math.PI*1.9); ctx.fill();
     // 衣带:腰间一道部族深色
     ctx.fillStyle='rgba(0,0,0,.2)';
     ctx.fillRect(w.x-1.7, w.y+bob-.2, 3.4, .7);
@@ -950,6 +987,22 @@ function drawMeteors(){
 }
 
 // ---------------- 闪电 / 光柱 / 裂缝 / 光环 ----------------
+function drawWarArrows(){
+  if (!G || !G.wars) return;
+  for (const w of G.wars){
+    const A=G.settlements[w.a], B=G.settlements[w.b];
+    if (!A||!B||!A.alive||!B.alive) continue;
+    const t2 = Math.min(1, w.t/w.dur);
+    // 箭雨:沿进军路线随机短弧
+    for (let k=0;k<4;k++){
+      const tt = (T_*2+k*.27+w.key)%1;
+      const x = A.tx+(B.tx-A.tx)*tt, y = A.ty+(B.ty-A.ty)*tt - Math.sin(tt*Math.PI)*24;
+      const nx = A.tx+(B.tx-A.tx)*Math.min(1,tt+.03), ny = A.ty+(B.ty-A.ty)*Math.min(1,tt+.03) - Math.sin(Math.min(1,tt+.03)*Math.PI)*24;
+      ctx.strokeStyle='rgba(60,50,40,.55)'; ctx.lineWidth=.8;
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(nx,ny); ctx.stroke();
+    }
+  }
+}
 function drawBoltsBeams(){
   for (const b of FX.bolts){
     const a = 1-b.t/.42;
@@ -1017,6 +1070,10 @@ function drawWeather(dt){
       ctx.fillStyle=g; ctx.fillRect(px-r,py-r,r*2,r*2);
       if (Math.random()<.3) FX.add({x:px+(Math.random()-.5)*r,y:py+r*.6,
         vx:0,vy:-20,life:0,max:1,type:'healP',col:'#ffd86b',size:2});
+    } else if (z.type==='snow'){
+      // 雪天:整个区域蒙一层冷白
+      ctx.fillStyle='rgba(235,242,250,.13)';
+      ctx.fillRect(px-r,py-r,r*2,r*2);
     } else if (z.type==='rain' || z.type==='snow'){
       // 云盖
       const g=ctx.createRadialGradient(px,py-r*.3,r*.1,px,py,r);
@@ -1030,6 +1087,10 @@ function drawWeather(dt){
         if (z.type==='rain'){
           ctx.strokeStyle='rgba(170,200,240,.5)'; ctx.lineWidth=1;
           ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-3,y+9); ctx.stroke();
+          if (Math.random()<.2){ // 落地涟漪
+            ctx.strokeStyle='rgba(190,220,250,.3)';
+            ctx.beginPath(); ctx.arc(x-1, y+10, 1.4, 0, 7); ctx.stroke();
+          }
         } else {
           ctx.fillStyle='rgba(255,255,255,.8)';
           ctx.fillRect(x+Math.sin(T_*2+k)*3, y, 1.6, 1.6);
@@ -1042,15 +1103,42 @@ function drawWeather(dt){
 // ---------------- 云影 ----------------
 function drawClouds(){
   const t = T_;
-  ctx.fillStyle='rgba(10,14,22,.07)';
+  // 云影:先画地表上的柔和暗斑(偏移一半,模拟光从侧上方来)
+  ctx.fillStyle='rgba(6,10,18,.05)';
+  for (const c of clouds){
+    ctx.beginPath();
+    ctx.ellipse(c.x+18, c.y+26+Math.sin(t*.1+c.x)*8, c.r*.9, c.r*.5, 0, 0, 7);
+    ctx.fill();
+  }
+  // 云体:双椭圆叠出体积感
   for (const c of clouds){
     c.x += c.vx*.016; if (c.x-c.r>WORLD_PW) c.x=-c.r;
+    ctx.fillStyle='rgba(255,255,255,.05)';
+    ctx.beginPath();
+    ctx.ellipse(c.x-c.r*.18, c.y+Math.sin(t*.1+c.x)*8-c.r*.14, c.r*.92, c.r*.5, 0, 0, 7);
+    ctx.fill();
+    ctx.fillStyle='rgba(10,14,22,.07)';
     ctx.beginPath();
     ctx.ellipse(c.x, c.y+Math.sin(t*.1+c.x)*8, c.r, c.r*.55, 0, 0, 7);
     ctx.fill();
   }
 }
 
+// 天空鸟群:v 形小队缓缓掠过
+const birds = Array.from({length:4},(_,i)=>({x:Math.random()*2000, y:120+Math.random()*400, vx:.24+Math.random()*.2, ph:i*1.7}));
+function drawBirds(){
+  for (const b of birds){
+    b.x += b.vx; if (b.x > cam.x+innerWidth+80) { b.x = cam.x-80; b.y = cam.y+80+Math.random()*400; }
+    const wing = Math.sin(T_*6+b.ph);
+    ctx.strokeStyle='rgba(30,34,40,.5)'; ctx.lineWidth=1;
+    for (let k=0;k<3;k++){
+      const bx=b.x+k*7, by=b.y+((k%2)?3:0)+Math.sin(T_*3+b.ph+k);
+      ctx.beginPath();
+      ctx.moveTo(bx-2.4, by+wing); ctx.quadraticCurveTo(bx, by-1.2, bx+2.4, by+wing);
+      ctx.stroke();
+    }
+  }
+}
 // ---------------- 昼夜 ----------------
 let nightF = 0;
 function drawNight(x0,y0,x1,y1){
