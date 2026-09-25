@@ -181,6 +181,24 @@ function drawFarms(x0,y0,x1,y1){
       ctx.fillRect(px+1,py+1,TILE-2,TILE-2);
       ctx.globalAlpha = 1;
     }
+    // 一株株庄稼立在垄上:3×3 株,随生长阶段抽高(种田游戏式)
+    if (st>=1 && t!==TER.HILL){
+      const sway = Math.sin(T_*1.8 + x*2.1 + y*1.3)*.4;
+      for (let ry=0;ry<3;ry++) for (let rx=0;rx<3;rx++){
+        const gx = px+2.6+rx*3.4 + (ry%2)*1.2, gy = py+3.4+ry*3.6;
+        const hgt = 1.2 + st*1.1;
+        ctx.strokeStyle = st>=3 ? crop.dark || crop.col : '#5e8a48';
+        ctx.lineWidth = st>=2 ? 1.1 : .8;
+        ctx.beginPath();
+        ctx.moveTo(gx, gy+1);
+        ctx.quadraticCurveTo(gx+sway*.5, gy-hgt*.55, gx+sway, gy-hgt);
+        ctx.stroke();
+        if (st>=3){ // 穗头
+          ctx.fillStyle = crop.col;
+          ctx.beginPath(); ctx.ellipse(gx+sway, gy-hgt-0.8, 1.1, 1.7, sway*.3, 0, 7); ctx.fill();
+        }
+      }
+    }
     if (st>=3){
       // 金熟:麦浪微光
       if ((T_*1.5+hash2(x,y)*7)%3 < 1.2){
@@ -303,6 +321,22 @@ function drawFauna(x0,y0,x1,y1){
     }
     if (px<x0*TILE-20||px>x1*TILE+20||py<y0*TILE-20||py>y1*TILE+20) continue;
     const bob = Math.sin(T_*5+h.ph)*.5;
+    if (h.kind==='wolf'){
+      ctx.fillStyle='rgba(0,0,0,.3)';
+      ctx.beginPath(); ctx.ellipse(px, py+3, 4, 1.2, 0, 0, 7); ctx.fill();
+      ctx.fillStyle='#6e6a72';
+      ctx.beginPath(); ctx.ellipse(px, py, 4.4, 2.4, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(px+3.6, py-1.6, 1.7, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(px+2.8,py-2.8); ctx.lineTo(px+3.2,py-4.6); ctx.lineTo(px+4.2,py-2.9); ctx.fill();
+      ctx.fillStyle='#e8e8f0';
+      for (let k=0;k<3;k++) ctx.fillRect(px-3+k*2.6, py+ (k%2? -.8:0), 1, 2.2);
+      ctx.strokeStyle='#6e6a72'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(px-4, py+1.6); ctx.lineTo(px-6.4, py+2.6+Math.sin(T_*7+h.ph)); ctx.stroke();
+      // 追猎时发红的眼睛
+      ctx.fillStyle = '#e04848';
+      ctx.fillRect(px+3.9, py-1.9, .9, .7);
+      continue;
+    }
     if (h.kind==='mammoth'){
       ctx.fillStyle='rgba(0,0,0,.25)';
       ctx.beginPath(); ctx.ellipse(px,py+4,6,2.2,0,0,7); ctx.fill();
@@ -615,7 +649,18 @@ function drawRocketPad(s){
 function drawWalkers(){
   const col = ERAS[G.era].dot;
   for (const w of G.walkers){
-    if (w.kind==='dead'){ continue; }
+    if (w.kind==='dead'){
+      const dt2 = w.deadT||0;
+      if (dt2 < 6){
+        ctx.globalAlpha = Math.max(0, 1-dt2/6);
+        ctx.fillStyle='#8a8a92';
+        ctx.beginPath(); ctx.arc(w.x, w.y, 1.8, 0, 7); ctx.fill();
+        ctx.fillStyle='#b0b0b8';
+        ctx.fillRect(w.x-1.2, w.y-2.6, 2.4, 1.2);
+        ctx.globalAlpha = 1;
+      }
+      continue;
+    }
     if (w.kind==='cart'){ // 粮车:车轮+粮袋+推车人
       ctx.fillStyle='rgba(0,0,0,.28)';
       ctx.beginPath(); ctx.ellipse(w.x, w.y+2.6, 5, 1.6, 0, 0, 7); ctx.fill();

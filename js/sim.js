@@ -161,9 +161,25 @@ function tickSettlement(s, S){
   s.store = Math.max(0, Math.min(storeCap(s), s.store + income - eat));
   s.income = income; s.eat = eat;
   if (s.store > storeCap(s)*.5 && s.pop < cap && S.growth > 0){
-    const g = ((0.0042*s.pop + .12) / (1 + s.level*.5)) * .25 * S.growth * (G.clim ? (G.clim.type==='cold'?.8:1.12) : 1);
+    const g = ((0.0062*s.pop + .2) / (1 + s.level*.5)) * .25 * S.growth * (G.clim ? (G.clim.type==='cold'?.8:1.12) : 1);
     s.pop += g; G.stats.born += g; s.store -= g*2;
     s.famine = false;
+    // 房屋随人口而建(每4人一座,受时代规模限制)——房屋能抵御严寒与猛兽
+    s.houses = Math.min(Math.ceil(s.pop/4), 6 + s.level*7);
+    // 生老病死:寿老与病故(粮食充足时也会有人走到生命尽头)
+    const lifeBase = G.era>=2 ? .00018 : .00035; // 医学与温饱延年益寿
+    const natd = s.pop * lifeBase * (G.clim&&G.clim.type==='cold'?1.6:1);
+    if (natd > 0 && s.pop > 8){
+      s.pop -= natd; G.stats.deaths += natd;(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
+      if (RNG() < .12 && G.year-(s.deathLogY||0) > 6){
+        s.deathLogY = G.year;
+        const ways = ['一位老者在篝火旁讲完最后一个故事,安详地闭上了眼。',
+          '一位族人染疾不治,族人把他葬在向阳的山坡。',
+          '一位猎人 chase 猎物时失足坠崖,再没有回来。'];
+        log(`【生死】${s.name}:${ways[(RNG()*ways.length)|0]}`, 'lg-dim');
+        FX.burst(s.tx+rnd(-10,10), s.ty+rnd(-10,10), 6, '#c8c8d8', 60);
+      }
+    }
   } else if (s.store <= .01 && income < eat){
     s.famine = true;
     const d = s.pop*(s.traits&&s.traits.tenacious ? .0015 : .0025);
@@ -234,7 +250,7 @@ function tickSettlement(s, S){
   if (s.pop < 1 && s.alive) destroySettlement(s, '衰亡');
 }
 function destroySettlement(s, why){
-  s.alive = false; G.stats.deaths += s.pop; s.pop = 0;
+  s.alive = false; G.stats.deaths += s.pop; s.pop = 0;(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
   // 留下废墟:断壁残垣随岁月渐渐湮灭,而非凭空消失
   G.ruins.push({x:s.tx, y:s.ty, t:0, col:s.col||'#c9a53f', level:s.level});
   chron(`${s.name}${why==='衰亡'?'在岁月中消逝':'毁灭于'+(causeName(why)||why)}`, 'doom');
@@ -421,7 +437,7 @@ function damageSettlement(s, frac, cause, sev=2){
   if (cause==='cold' && G.flags.fire) resist *= .25;
   if (cause==='cold' && G.adaptations.clothing) resist *= .15;
   const d = s.pop * Math.min(.97, frac * resist);
-  s.pop -= d; G.stats.deaths += d; G.lastCause = causeName(cause);
+  s.pop -= d; G.stats.deaths += d; G.lastCause = causeName(cause);(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
   s.damaged = Math.min(1, s.damaged + frac*.55);
   if (s.pop < 1.5){ destroySettlement(s, cause); return false; }
   return true; // 幸存
@@ -508,6 +524,19 @@ function manageWalkers(){
       have++;
       if (w.kind==='walk') idle++;
     }
+    // 生老病死:族人岁月增长,寿终正寝
+    for (const w of G.walkers){
+      if (w.home!==s.id || w.kind==='dead') continue;
+      w.age = (w.age===undefined ? 14+RNG()*16 : w.age); // 以季计
+      w.age += 1;
+      const lifespan = (52 + (w.spd-12)*3.5 + RNG()*0) * 4; // 52~87 岁(季→年)
+      if (w.age > lifespan){
+        w.kind='dead'; w.deadT=0; w.cause='age';
+        G.stats.deaths += 1;
+        FX.burst(w.x, w.y, 5, '#d8d8e8', 70);
+        if (RNG()<.15) log('【生死】一位白发族人走完了漫长的一生,孩子们把他葬在部落东边的老树下。', 'lg-dim');
+      }
+    }
     // 新生子民直接上岗
     if (have < want && total < 520){
       const n = Math.min(want-have, 3);
@@ -517,15 +546,15 @@ function manageWalkers(){
         total++;
       }
     }
-    // 闲民每年重新派活
+    // 闲民重新派活:每年必派,每季再抽查三成(更快响应资源变化)
     for (const w of G.walkers)
-      if (w.home===s.id && w.kind==='walk') w.kind = pickJob(s);
+      if (w.home===s.id && w.kind!=='dead' && (w.kind==='walk' || RNG()<.3)) w.kind = pickJob(s);
   }
 }
 function updateWalkers(dt){
   const alive = aliveSettlements();
   for (const w of G.walkers){
-    if (w.kind==='dead') continue;
+    if (w.kind==='dead'){ w.deadT=(w.deadT||0)+dt; continue; }
     const home = G.settlements[w.home];
     if (!home || !home.alive){ w.kind='dead'; w.deadT=(w.deadT||0)+dt; continue; }
     // 农夫:寻找成熟农田,收割入仓
@@ -533,15 +562,31 @@ function updateWalkers(dt){
       if (w.tile===undefined || W.FS[w.tile]<3 || W.FS[w.tile]>=6 || W.FARM[w.tile]!==home.id+1)
         w.tile = findRipeFarm(home);
       if (w.tile === -1){
-        // 无成熟农田:在田间备耕游走
-        if (Math.hypot(w.tx-w.x, w.ty-w.y) < 4){
-          const r = LEVELS[home.level].r*TILE;
-          w.tx = home.tx + rnd(-r,r); w.ty = home.ty + rnd(-r,r);
+        // 无成熟农田:去自己部族的青苗田里备耕除草,没有就去更远的荒地踏勘
+        if (w.gtile===undefined || Math.hypot(w.gtx-w.x, w.gty-w.y) < 4){
+          let best=-1, bd=1e9;
+          const cx2=home.x|0, cy2=home.y|0, rr2=LEVELS[home.level].r+6;
+          for (let dy=-rr2;dy<=rr2;dy+=2) for (let dx=-rr2;dx<=rr2;dx+=2){
+            const x2=cx2+dx, y2=cy2+dy;
+            if (!inW(x2,y2)) continue;
+            const i2=y2*WORLD_W+x2;
+            if (W.FARM[i2]===home.id+1 && W.FS[i2]>0 && W.FS[i2]<3){
+              const d2=dx*dx+dy*dy; if (d2<bd){ bd=d2; best=i2; }
+            }
+          }
+          if (best>=0){ w.gtile=best; w.gtx=(best%WORLD_W)*TILE+7; w.gty=((best/WORLD_W)|0)*TILE+7; }
+          else { // 踏勘:朝远离部落的随机远方走(不再围着基地打转)
+            const a=RNG()*Math.PI*2, dist=(6+RNG()*9)*TILE;
+            w.gtx = home.tx + Math.cos(a)*dist; w.gty = home.ty + Math.sin(a)*dist;
+            w.gtile = -1;
+          }
         }
+        w.tx=w.gtx; w.ty=w.gty;
         const fdx=w.tx-w.x, fdy=w.ty-w.y, fd=Math.hypot(fdx,fdy);
         if (fd>0.1){ w.x+=fdx/fd*w.spd*dt; w.y+=fdy/fd*w.spd*dt; }
         continue;
       }
+      w.tile===w.gtile && (w.gtile=undefined);
       w.tx = (w.tile%WORLD_W)*TILE+7; w.ty = ((w.tile/WORLD_W)|0)*TILE+7;
       const mdx=w.tx-w.x, mdy=w.ty-w.y, md=Math.hypot(mdx,mdy);
       if (md < 5){
@@ -785,6 +830,64 @@ function updateWalkers(dt){
   if ((G.year&31)===0 || G.walkers.length>560)
     G.walkers = G.walkers.filter(w=> w.kind!=='dead' || w.deadT<8);
 }
+function seasonalDisaster(){
+  const pick = (arr) => arr[(RNG()*arr.length)|0];
+  const landSpot = () => {
+    for (let k=0;k<80;k++){
+      const x=(RNG()*WORLD_W)|0, y=(RNG()*WORLD_H)|0;
+      const t=tAt(x,y);
+      if (t>=2 && t<=12) return {x,y,t};
+    }
+    return null;
+  };
+  const sp = landSpot(); if (!sp) return;
+  const names = {0:'春汛',1:'夏旱',2:'秋隳',3:'冬暴'};
+  const kind = G.season;
+  G.stats.natDisaster = (G.stats.natDisaster||0)+1;
+  // 灾祸逼出智慧:挺过天灾的部落,知识跃进(适应与发明的源头)
+  for (const s of aliveSettlements()){
+    const d = Math.hypot(s.x-sp.x, s.y-sp.y);
+    if (d < 14){
+      G.knowledge += 60 + G.era*300;
+      s.store = Math.max(s.store, 1);
+    }
+  }
+  if (kind===0){
+    // 春汛:河湖决堤,低地成沼
+    floodPeak({x:sp.x, y:sp.y, R:4});
+    for (let dy=-4;dy<=4;dy++) for (let dx=-4;dx<=4;dx++){
+      const x2=sp.x+dx, y2=sp.y+dy;
+      if (!inW(x2,y2)) continue;
+      const i2=y2*WORLD_W+x2;
+      if ((W.T[i2]===TER.GRASS||W.T[i2]===TER.FOREST) && W.E[i2]<.45 && RNG()<.3) setTile(x2,y2,TER.SWAMP);
+    }
+    log('🌊 春汛冲开了河堤,低洼的谷地化作沼泽——灾后,泽畔的人学会了掘鱼为生。', 'lg-bad');
+    chron('【天灾·春汛】大河决堤,低地成沼。沼泽部落在泥泞中学会了渔稻。', 'doom');
+  } else if (kind===1){
+    // 夏旱:赤日炎炎,野火自起
+    G.weatherZones.push({type:'sun', x:sp.x, y:sp.y, r:7, t:10});
+    if (sp.t===TER.FOREST || sp.t===TER.GRASS) igniteFire(sp.x, sp.y, 1);
+    log('☀️ 夏旱连月,赤地千里——一道野火在干裂的林地里自己烧了起来。', 'lg-bad');
+    chron('【天灾·夏旱】赤日炎炎,野火自焚。幸存的部落从此懂得开辟防火带。', 'doom');
+  } else if (kind===2){
+    // 秋隳:早霜杀稼
+    G.weatherZones.push({type:'snow', x:sp.x, y:sp.y, r:6, t:8});
+    for (let dy=-6;dy<=6;dy++) for (let dx=-6;dx<=6;dx++){
+      const x2=sp.x+dx, y2=sp.y+dy;
+      if (!inW(x2,y2)) continue;
+      const i2=y2*WORLD_W+x2;
+      if (W.FARM[i2] && W.FS[i2]>0 && W.FS[i2]<4 && RNG()<.35) W.FS[i2]=0;
+    }
+    log('🌨 秋霜早至,未熟的庄稼冻死田间——部落将盼望寄托于储粮与祭祀。', 'lg-bad');
+    chron('【天灾·秋隳】早霜杀稼,青苗尽萎。仓廪之重,自此刻进文明的骨血。', 'doom');
+  } else {
+    // 冬暴:白毛风雪,冻毙牛羊
+    G.weatherZones.push({type:'snow', x:sp.x, y:sp.y, r:9, t:14});
+    AU.whoosh();
+    log('❄️ 冬暴席卷旷野,风雪埋没了兽群的小径——猎人围炉不出的季节到了。', 'lg-bad');
+    chron('【天灾·冬暴】白毛风雪连月不歇。挺过寒冬的部落,把火塘垒得更深。', 'doom');
+  }
+}
 function tickSim(){
   const S = SEASONS[G.season];
   const newYear = (G.season === 3);
@@ -792,6 +895,8 @@ function tickSim(){
   if (newYear) G.year++;
   // 天气 / 灾害模拟推进
   tickDisastersSim();
+  // 上帝之外,天地自怒:四季各有其灾,迫使人类适应进化
+  if (G.phase==='play' && RNG() < .016) seasonalDisaster();
   // 聚落(按季节调制收支与生长)
   for (const s of G.settlements) tickSettlement(s, S);
   // 战争与动物
@@ -967,7 +1072,7 @@ function resolveWar(w, A, B){
   const defLoss = Math.min(B.pop*.85, atk*(0.5+RNG()*.5));
   const atkLoss = Math.min(w.sent, def*(0.4+RNG()*.4));
   B.pop -= defLoss; w.sent -= atkLoss;
-  G.stats.deaths += defLoss + atkLoss;
+  G.stats.deaths += defLoss + atkLoss;(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
   G.faith = Math.max(0, G.faith - 2.5);
   FX.burst(B.tx, B.ty, 34, '#e05c4a', 100);
   FX.burst(B.tx, B.ty, 20, '#ffd86b', 70);
@@ -1062,7 +1167,8 @@ function spawnHerd(){
     const t = tAt(x,y);
     let kind=null;
     if (t===TER.GRASS) kind = (G.era<3 && RNG()<.22) ? 'mammoth' : 'deer';
-    else if (t===TER.FOREST) kind='boar';
+    else if (t===TER.FOREST) kind = RNG()<.22 ? 'wolf' : 'boar';
+    else if (t===TER.HILL && RNG()<.3) kind='wolf';
     else if (t===TER.TUNDRA) kind = G.era<3 ? 'mammoth' : (RNG()<.5?'deer':null);
     else if (t===TER.RIVER || t===TER.OASIS) kind='fish';
     else if (t===TER.SEA && nearLand(x,y)) kind='fish';
@@ -1133,9 +1239,45 @@ function tickFauna(){
 function updateFauna(dt){
   if (!G || !G.herds) return;
   for (const h of G.herds){
-    const dx=h.tx-h.x, dy=h.ty-h.y, d=Math.hypot(dx,dy);
+    let dx=h.tx-h.x, dy=h.ty-h.y, d=Math.hypot(dx,dy);
+    // 猛兽:追猎 6 格内落单的族人;聚落房屋与围墙是安全区
+    if (h.kind==='wolf'){
+      let prey=null, pd=36;
+      for (const w of G.walkers){
+        if (w.kind==='dead'||w.kind==='war'||w.kind==='cart') continue;
+        const wd=Math.hypot(w.x-h.x, w.y-h.y);
+        if (wd<pd){ pd=wd; prey=w; }
+      }
+      if (prey){
+        let safe=false;
+        for (const s of aliveSettlements())
+          if ((s.houses||0)>=3 && Math.hypot(prey.x-s.tx, prey.y-s.ty)<3.2){ safe=true; break; }
+        if (safe){ prey = null; }
+        else {
+          // 猎物逃命:朝最近的聚落狂奔
+          let hs=null, hd=1e9;
+          for (const s of aliveSettlements()){
+            const sd=Math.hypot(prey.x-s.tx, prey.y-s.ty);
+            if (sd<hd){ hd=sd; hs=s; }
+          }
+          if (hs) { prey.tx=hs.tx; prey.ty=hs.ty; }
+          dx=prey.x-h.x; dy=prey.y-h.y; d=Math.hypot(dx,dy);
+          h.tx=h.x+dx; h.ty=h.y+dy;
+          if (d < 2.2){
+            // 扑杀
+            prey.kind='dead'; prey.deadT=0; prey.cause='beast';
+            G.stats.deaths += 1;
+            s.pop = Math.max(1, s.pop-1); // 猛兽袭人:部落确实少了一个人
+            FX.burst(prey.x, prey.y, 8, '#c04040', 50);
+            if (RNG()<.3) log('【生死】一名族人被猛兽扑倒……部落为死者立起了石堆。', 'lg-dim');
+            h.tx=h.x+(RNG()-.5)*6; h.ty=h.y+(RNG()-.5)*6;
+            continue;
+          }
+        }
+      }
+    }
     if (d > .05){
-      const v = Math.min(d, (h.kind==='fish' ? .28 : .5)*dt);
+      const v = Math.min(d, (h.kind==='fish' ? .28 : h.kind==='wolf' ? 1.1 : .5)*dt);
       h.x += dx/d*v; h.y += dy/d*v;
     }
   }

@@ -47,12 +47,13 @@ const CROPS = {
   [TER.BASALT]: {name:'火山豆', col:'#b8926a', dark:'rgba(60,30,20,.28)'},
 };
 // ---- 狩猎方式(按猎物/地形) ----
-const HUNT_YIELD = {deer:.24, boar:.30, mammoth:.55, fish:.15};
+const HUNT_YIELD = {deer:.24, boar:.30, mammoth:.55, fish:.15, wolf:.18};
 const HUNT_METHOD = {
   deer:    {name:'草原追猎', story:'草原追猎——他们学会驱赶兽群,长矛齐出'},
   boar:    {name:'林间围猎', story:'林间围猎——陷阱与号角声包围了猎物'},
   mammoth: {name:'苔原协作围猎', story:'苔原协作围猎——整支部落合力对付巨兽'},
   fish:    {name:'水畔渔猎', story:'水畔渔猎——他们叉鱼、织网,向河流湖泊讨生活'},
+  wolf:    {name:'御狼卫戍', story:'御狼卫戍——猎人们围歼了袭人的狼群,从此聚落有了守夜人'},
 };
 
 // ---- 时代 ----
@@ -60,9 +61,9 @@ const HUNT_METHOD = {
 // lv: 该时代聚落最高等级 | dot: 族人服饰色
 // 阈值按「14 聚落封顶」的人口阶梯重新标定:每时代约 500~900 年
 const ERAS = [
-  {name:'蒙昧时代', en:'DAWN OF HOMINIDS', kn:300,      pop:0,     sci:.022, gather:.62, lv:0, dot:'#b98a5e',
+  {name:'蒙昧时代', en:'DAWN OF HOMINIDS', kn:300,      pop:0,     sci:.045, gather:.62, lv:0, dot:'#b98a5e',
    desc:'古猿走出丛林,第一次仰望星空'},
-  {name:'石器时代', en:'STONE AGE',        kn:700,     pop:60,    sci:.05,  gather:1.0,  lv:1, dot:'#9c7b52',
+  {name:'石器时代', en:'STONE AGE',        kn:700,     pop:60,    sci:.10,  gather:1.0,  lv:1, dot:'#9c7b52',
    desc:'打制石器,围猎走兽,篝火边传递语言'},
   {name:'火焰时代', en:'AGE OF FIRE',      kn:8000,    pop:120,   flag:'fire', sci:.12, gather:1.5, lv:1, dot:'#c27b3a',
    desc:'他们保存了天火——黑暗与严寒再也无法轻易杀死他们'},

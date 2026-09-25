@@ -155,7 +155,8 @@ function fillStats(elId){
     ['扛过灾难', G.stats.survived+' 场'],
     ['降下神迹', G.stats.miracles+' 次'],
     ['部落战争', G.stats.wars+' 场'],
-    ['逝去生灵', fmt(G.stats.deaths)],
+    ['诞生新魂', fmt(G.stats.born)],
+    ['逝去生灵', fmt(G.stats.deaths)+' (天灾 '+(G.stats.natDisaster||0)+')'],
   ];
   $(elId).innerHTML = rows.map(r=>`<div>${r[0]}<b>${r[1]}</b></div>`).join('');
 }

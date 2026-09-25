@@ -316,6 +316,9 @@ function tickFires(){ // 每年
       G.fires.delete(i);
       scorch(f.x, f.y, .8);
       W.FB[i] += .15; // 灰烬肥沃
+      // 大火烧透了:林地化为焦砾之地(Simmiland 式:灾祸塑造地貌)
+      const bt = W.T[i];
+      if ((bt===TER.FOREST||bt===TER.GRASS) && RNG()<.3) setTile(f.x, f.y, TER.RUBBLE);
     }
   }
   // 火焰灼烧邻近聚落(每聚落 8 年冷却,小部落可以逃离火线)
@@ -340,6 +343,14 @@ function castQuake(wx,wy){
   for (let k=0;k<7;k++){ cx+=(Math.random()-.5)*60; cy+=(Math.random()-.5)*60; pts.push([cx,cy]); }
   FX.cracks.push({pts, t:0});
   FX.burst(wx*TILE, wy*TILE, 22, '#a8967c', 70);
+  // 大地撕裂:裂缝沿线岩层破碎成砾地
+  for (const [qx,qy] of pts){
+    const gx=(qx/TILE)|0, gy=(qy/TILE)|0;
+    if (inW(gx,gy)){
+      const t2=W.T[gy*WORLD_W+gx];
+      if ((t2===TER.GRASS||t2===TER.FOREST) && RNG()<.4) setTile(gx,gy,TER.RUBBLE);
+    }
+  }
   for (const s of aliveSettlements()){
     const d = Math.hypot(s.x-wx, s.y-wy);
     if (d < 4.4){
