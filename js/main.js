@@ -85,7 +85,22 @@ window.addEventListener('pointerup', e=>{
   if (G.phase==='play' && uiState.selected){
     AU.click();
     castPower(uiState.selected, tx+.5, ty+.5);
+    return;
   }
+  // 检视部落:点击聚落基地
+  if (G.phase==='play'){
+    let hit = null, hd = 3.4;
+    for (const s of G.settlements){
+      if (!s.alive) continue;
+      const d = Math.hypot(s.x-.5-tx, s.y-.5-ty);
+      if (d<hd){ hd=d; hit=s; }
+    }
+    if (hit){ AU.click(); openTribe(hit.id); }
+    else closeTribe();
+  }
+});
+window.addEventListener('keydown', e=>{
+  if (e.key==='Escape' && tribeOpenId>=0) closeTribe();
 });
 cv.addEventListener('wheel', e=>{
   e.preventDefault();

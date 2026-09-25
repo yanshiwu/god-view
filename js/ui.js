@@ -144,6 +144,96 @@ function uiRefreshAdapt(){
 }
 
 // ---- 结算统计 ----
+// ---- 部落检视面板 ----
+let tribeOpenId = -1;
+function openTribe(id){
+  tribeOpenId = id;
+  fillTribe();
+  $('ov-tribe').classList.remove('hide');
+}
+function closeTribe(){ tribeOpenId = -1; $('ov-tribe').classList.add('hide'); }
+function fillTribe(){
+  const s = G.settlements[tribeOpenId];
+  if (!s || !s.alive){ closeTribe(); return; }
+  const lv = LEVELS[s.level];
+  const r = lv.r + 4;
+  const cx = s.x|0, cy = s.y|0;
+  // 附近资源清点
+  let berry=0, oreC=0, oreI=0, oreG=0, water=0, forest=0;
+  for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++){
+    const x=cx+dx, y=cy+dy;
+    if (!inW(x,y)) continue;
+    const i=y*WORLD_W+x;
+    if (W.BERRY && W.BERRY[i]) berry++;
+    if (W.ORE && W.ORE[i]===1) oreC++; else if (W.ORE&&W.ORE[i]===2) oreI++; else if (W.ORE&&W.ORE[i]===3) oreG++;
+    if (W.T[i]===TER.RIVER||W.T[i]===TER.OASIS||W.T[i]===TER.SEA) water++;
+    if (W.T[i]===TER.FOREST) forest++;
+  }
+  // 农田与作物
+  const crops = {};
+  let farmN = 0, ripe = 0;
+  for (let i=0;i<W.FARM.length;i++){
+    if (W.FARM[i]!==s.id+1) continue;
+    farmN++;
+    if (W.FS[i]>=3 && W.FS[i]<6) ripe++;
+    const t = W.T[i];
+    const cr = CROPS[t] || CROPS[TER.GRASS];
+    crops[cr.name] = (crops[cr.name]||0)+1;
+  }
+  const cropStr = Object.keys(crops).length
+    ? Object.keys(crops).map(k=>`${k}×${crops[k]}块`).join('、')
+    : '<span style="color:var(--ink-dim)">尚未开垦</span>';
+  // 职业
+  const jobs = {};
+  for (const w of G.walkers){
+    if (w.home!==s.id || w.kind==='dead') continue;
+    jobs[JOBS[w.kind] ? JOBS[w.kind].name : w.kind] = (jobs[JOBS[w.kind]?JOBS[w.kind].name:w.kind]||0)+1;
+  }
+  const jobStr = Object.keys(jobs).length
+    ? Object.keys(jobs).map(k=>`${k}×${jobs[k]}`).join(' · ')
+    : '<span style="color:var(--ink-dim)">无人劳作</span>';
+  // 关系
+  const rels = [];
+  for (const k in G.relations){
+    const r2 = G.relations[k];
+    if (!r2 || (r2.grudge||0)<=0 && !(r2.ally)) continue;
+    const [a,b] = k.split(',').map(Number);
+    if (a!==s.id && b!==s.id) continue;
+    const o = G.settlements[a===s.id?b:a];
+    if (!o || !o.alive) continue;
+    if (r2.ally) rels.push(`🤝 与 ${o.name} 结盟`);
+    else if (r2.grudge>0) rels.push(`💢 与 ${o.name} 有旧怨(${Math.round(r2.grudge)})`);
+  }
+  const warsNow = G.wars.filter(w=>w.a===s.id||w.b===s.id)
+    .map(w=>`⚔️ 正与 ${G.settlements[w.a===s.id?w.b:w.a].name} 交战`);
+  const geoName = {river:'河谷',coast:'海滨',grass:'草原',forest:'林地',mountain:'山地',desert:'荒漠',swamp:'沼泽',tundra:'苔原'}[s.geo]||s.geo;
+  const traitStr = s.traits ? Object.keys(s.traits).map(t=>TRAITS[t]?TRAITS[t].name:t).join('、') : '—';
+  const status = [];
+  if (s.famine) status.push('<span style="color:#e08f8f">饥荒中</span>');
+  if (s.plague) status.push('<span style="color:#e08f8f">瘟疫蔓延</span>');
+  if (s.damaged>.2) status.push('<span style="color:#e0c88f">建筑受损</span>');
+  if (s.armory) status.push('⚒️ 设武器作坊');
+  if (s.arsenal) status.push('🏭 设军工厂');
+  const rows = [
+    ['🏛 部落', `<b style="color:${s.col}">${s.name}</b>(建立于 纪元 ${s.foundY} 年)`],
+    ['📜 时代', ERAS[G.era].name],
+    ['🏞 地理', geoName + '部落 · ' + lv.name],
+    ['👥 人口', `${fmt(s.pop)} / ${fmt(lv.cap)}(房屋 ${s.houses||Math.ceil(s.pop/4)} 间)`],
+    ['🌾 存粮', `${fmt(s.store)} / ${fmt(storeCap(s))}(季收 ${fmt(s.income||0)} · 季食 ${fmt(s.eat||0)})`],
+    ['🌱 农田', `${farmN} 块,待收 ${ripe} 块:${cropStr}`],
+    ['⛏ 矿脉', `铜 ${oreC} · 铁 ${oreI} · 金 ${oreG}(领地内)`],
+    ['🫐 浆果丛', `${berry} 处 · 林地 ${forest} 块 · 水域 ${water} 块`],
+    ['🧑‍🌾 劳作', jobStr],
+    ['🧬 部落特质', traitStr],
+    ['🤝 关系', rels.length?rels.join('<br>'):'<span style="color:var(--ink-dim)">与世无争</span>'],
+    status.length?['⚠ 状态', status.join(' · ')]:null,
+    warsNow.length?['🔥 战况', warsNow.join('<br>')]:null,
+  ].filter(Boolean);
+  $('tribe-name').textContent = s.name;
+  $('tribe-name').style.color = s.col;
+  $('tribe-sub').textContent = ERAS[G.era].en + ' · ' + lv.name.toUpperCase();
+  $('tribe-body').innerHTML = rows.map(r2=>`<div style="display:flex"><span style="width:96px;flex:none;color:var(--ink-dim)">${r2[0]}</span><span>${r2[1]}</span></div>`).join('');
+}
 function fillStats(elId){
   const mins = Math.round((performance.now()-bootT)/1000);
   const rows = [
@@ -185,6 +275,7 @@ function bindControls(){
   $('btn-help').onclick = ()=> $('ov-help').classList.remove('hide');
   $('btn-chron').onclick = ()=> openChronicle();
   $('btn-chron-close').onclick = ()=> $('ov-chron').classList.add('hide');
+  $('btn-tribe-close').onclick = closeTribe;
   $('btn-help-close').onclick = ()=> $('ov-help').classList.add('hide');
   $('btn-reset').onclick = ()=> location.reload();
   $('btn-start').onclick = startCreation;

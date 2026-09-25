@@ -48,7 +48,7 @@ function genName(level){
 function spawnSettlement(x,y,pop,level,name,parentCol){
   const s = {
     id: G.settlements.length, x:x+.5, y:y+.5, tx:x*TILE+TILE/2, ty:y*TILE+TILE/2,
-    name: name || genName(level), pop, store: 60, level, alive:true, born: G.year,
+    name: name || genName(level), pop, store: 60, level, alive:true, born: G.year, foundY: G.year,
     col: parentCol || TRIBE_COLORS[G.colSeq++ % TRIBE_COLORS.length],
     plague:null, famine:false, damaged:0, lastMig:G.year, lastLogY:-999, coldY:0,
     seedT: 0,
@@ -938,6 +938,8 @@ function tickSim(){
       }
     }
   }
+  // 部落检视面板:随季刷新
+  if (typeof tribeOpenId!=='undefined' && tribeOpenId>=0 && typeof fillTribe==='function') fillTribe();
   // 农田生长 / 农夫 / 商队
   tickFarmsGrowth(S);
   manageFarmers();
