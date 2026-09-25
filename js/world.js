@@ -151,6 +151,22 @@ function genWorld(seed){
       }
     }
   }
+  // ---- 远古遗迹:先于人类存在的谜(发现本身即奖励) ----
+  W.RUIN = new Uint8Array(WORLD_W*WORLD_H);
+  let ruinN = 0;
+  for (let n=0;n<4000 && ruinN<8;n++){
+    const x=(RNG()*WORLD_W)|0, y=(RNG()*WORLD_H)|0, i=y*WORLD_W+x;
+    const t=W.T[i];
+    if ((t===TER.GRASS||t===TER.HILL||t===TER.DESERT||t===TER.TUNDRA) && !W.RUIN[i] && W.FARM[i]===0){
+      // 周围 6 格内没有别的遗迹
+      let ok=true;
+      for (let dy=-6;dy<=6 && ok;dy++) for (let dx=-6;dx<=6;dx++){
+        const x2=x+dx,y2=y+dy;
+        if (x2>=0&&y2>=0&&x2<WORLD_W&&y2<WORLD_H && W.RUIN[y2*WORLD_W+x2]){ ok=false; break; }
+      }
+      if (ok){ W.RUIN[i]=1; ruinN++; }
+    }
+  }
   // ---- 浆果丛:林缘的四季口粮 ----
   W.BERRY = new Uint8Array(WORLD_W*WORLD_H);
   for (let n=0;n<900;n++){
@@ -246,6 +262,16 @@ function bakeTile(x,y){
     ctx.fillStyle=oc;
     ctx.fillRect(px+5.4,py+6.6,1.4,1.4);
     ctx.fillRect(px+7.6,py+8.2,1.2,1.2);
+  }
+  // 远古遗迹:倾颓的石柱与残碑
+  if (W.RUIN && W.RUIN[i]){
+    ctx.fillStyle='#8d8a84';
+    ctx.fillRect(px+2.2, py+4, 1.8, 7);   // 断柱
+    ctx.fillRect(px+8.4, py+5.5, 1.6, 5.5);
+    ctx.fillStyle='#a5a29a';
+    ctx.fillRect(px+4.6, py+9.2, 5, 1.4); // 残碑
+    ctx.strokeStyle='rgba(60,58,54,.5)'; ctx.lineWidth=.5;
+    ctx.beginPath(); ctx.moveTo(px+3.1, py+4.8); ctx.lineTo(px+3.1, py+9); ctx.stroke();
   }
   // 焦黑
   if (W.SC[i] > .02){

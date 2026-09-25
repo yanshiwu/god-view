@@ -14,6 +14,9 @@ function newGame(){
     settlements:[], walkers:[], pendingMig:[],
     herds:[], wars:[], warSeq:0, nextWarY:80,
     chronicle:[], relations:{}, colSeq:0, routes:[], season:0, clim:null, ruins:[], nature:0, faithHighT:0,
+    counters:{mined:0, traded:0, warsSurv:0, wishAns:0},
+    morale:70,
+    wishes:[], wishSeq:0,
     fires:new Map(), weatherZones:[], ashT:0, iceT:0, windT:0,
     stats:{born:0, deaths:0, cast:0, survived:0, miracles:0, storyPop:0, wars:0, hunted:0, harvests:0},
     cooldowns:{}, lastCause:'严酷的自然',
@@ -52,7 +55,10 @@ function spawnSettlement(x,y,pop,level,name,parentCol){
     col: parentCol || TRIBE_COLORS[G.colSeq++ % TRIBE_COLORS.length],
     plague:null, famine:false, damaged:0, lastMig:G.year, lastLogY:-999, coldY:0,
     seedT: 0,
+    chief: null,
   };
+  s.chief = newChief(s);
+  log(`🪶 ${s.name} 推举 ${s.chief.name} 为${CHIEF_TITLES[Math.min(G.era,5)]}——此人性格「${Object.keys(s.chief.tr)[0]}」:${Object.values(s.chief.tr)[0].txt}`, 'lg-story');
   G.settlements.push(s);
   s.geo = detectGeo(s);
   if (s.geo && !G.flags['geo_'+s.geo]){
@@ -154,7 +160,7 @@ function tickSettlement(s, S){
   if (s.traits && s.traits.rooted) income *= 1.1;
   if (G.flags.cattle) income *= 1.12; // 畜力耕耘
   if (G.flags.plow) income *= 1.08;   // 犁铧
-  income += herdIncome(s); // 捕猎与渔获
+  income += herdIncome(s) * (G.flags.art_hunt?1.08:1); // 捕猎与渔获(猎骨号角)
   income *= S.income;      // 季节收成
   if (G.clim) income *= G.clim.type==='cold' ? .82 : 1.12; // 深度气候
   let eat = s.pop * (G.flags.fire? .85 : 1) * S.eat; // 冬天吃得更多,冬猎所得在 herdIncome 内加成
@@ -164,7 +170,7 @@ function tickSettlement(s, S){
     // 灾后/战后生育潮:人口跌到历史峰值35%以下,生育翻倍,慢慢恢复元气
     s.peakPop = Math.max(s.peakPop||s.pop, s.pop);
     if (s.peakPop>10) s.peakPop *= .996;
-    const boom = s.pop < s.peakPop*.35 ? 2 : 1;
+    const boom = (s.pop < s.peakPop*.35 ? 2 : 1) * (G.morale<20 ? .5 : G.morale>70 ? 1.15 : 1);
     const g = ((0.0062*s.pop + .25) / (1 + s.level*.25)) * .25 * S.growth * boom * (G.clim ? (G.clim.type==='cold'?.8:1.12) : 1);
     s.pop += g; G.stats.born += g; s.store -= g*2;
     s.famine = false;
@@ -181,6 +187,25 @@ function tickSettlement(s, S){
         G.knowledge += 80;
       }
     }
+    // 圣祠(信仰>80 的部落自建):信仰具象化,四邻巡礼
+    s.shrine = G.faith>80 && s.level>=1;
+    if (s.shrine && !s._shrineTold){
+      s._shrineTold = true;
+      const t = `【圣祠】${s.name} 在山丘上垒起了第一座圣祠——四方的族人跋涉而来,只为看一眼圣火。`;
+      log(t, 'lg-story'); chron(t, 'culture');
+    }
+    if (s.shrine){
+      G.faith = Math.min(100, G.faith + .02);
+      G.morale = Math.min(100, G.morale + .02);
+      if (RNG()<.008) FX.burst(s.tx+rnd(-8,8), s.ty-6, 3, '#ffd86b', 50);
+    }
+    // 市集(Anno 式需求链):有商路+农业时代,奢侈品让人民富足
+    s.market = G.era>=3 && s.level>=1 && G.routes.some(r2=>r2.a===s.id||r2.b===s.id);
+    if (s.market){
+      G.morale = Math.min(100, G.morale + .05); // 集市喧闹,人心欢畅
+      G.faith = Math.min(100, G.faith + .01);
+      if (RNG() < .01) FX.burst(s.tx+rnd(-12,12), s.ty+rnd(-12,12), 3, '#e8c84a', 40);
+    }
     // 军工厂(工业化:城市级聚落):流水线造武器,战力大增,战争绞肉机化
     s.arsenal = G.era>=5 && s.level>=2;
     if (s.arsenal && !(s._arsenalTold)){
@@ -189,7 +214,7 @@ function tickSettlement(s, S){
       log(t, 'lg-story'); chron(t, 'culture');
     }
     // 生老病死:寿老与病故(粮食充足时也会有人走到生命尽头)
-    const lifeBase = G.era>=2 ? .00018 : .00035; // 医学与温饱延年益寿
+    const lifeBase = (G.era>=2 ? .00018 : .00035) * (s.herbs>0 ? .8 : 1); // 医学、温饱与药草延年益寿
     const natd = s.pop * lifeBase * (G.clim&&G.clim.type==='cold'?1.6:1);
     if (natd > 0 && s.pop > 8){
       s.pop -= natd; G.stats.deaths += natd;(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
@@ -249,9 +274,11 @@ function tickSettlement(s, S){
   // 瘟疫
   if (s.plague){
     const p = s.plague; p.t++;
+    if (s.herbs===undefined) s.herbs = 0;
     let rate = .001 * p.sev;
     if (G.adaptations.medicine) rate *= .15;
     if (s.traits && s.traits.hygienic) rate *= .4;
+    if (s.herbs > 0){ s.herbs -= 1; rate *= .55; if (p.sev>1) p.sev -= .06; } // 草药师以药草遏制疫病
     rate *= Math.max(.3, 1 - G.era*.06);
     const d = s.pop * rate; s.pop -= d; G.stats.deaths += d;
     // 向邻近聚落蔓延
@@ -390,7 +417,15 @@ function knowledgeGain(){
   if (p<1) return 0;
   let k = ERAS[G.era].sci * Math.pow(p, .78);
   if (G.flags.fire) k *= 1.15;      // 烹饪假说:熟食提供更多热量养活大脑
+  if (G.flags.art_kn) k *= 1.06;    // 先知骨杖
+  { // 智慧首领:所有部落平均加成
+    let n=0, wise=0;
+    for (const q of aliveSettlements()){ n++; if (q.chief && q.chief.tr.智慧) wise++; }
+    if (n) k *= 1 + (wise/n)*.12;
+  }
   if (G.flags.theocracy) k *= .75;  // 教会掌权:求知受缚
+  if (G.morale < 20) k *= .6;       // 至暗时刻:无心学问
+  if (G.morale > 70) k *= 1.15;     // 人心昂扬
   if (G.faith > 80) k *= 1.25;      // 众志成城
   return k;
 }
@@ -508,6 +543,7 @@ const JOBS = {
   build:   {icon:'🔨', name:'工匠', tool:'hammer'},
   gather:  {icon:'🫐', name:'采者', tool:'basket'},
   mine:    {icon:'⛏️', name:'矿工', tool:'pick'},
+  herb:    {icon:'🌿', name:'药师', tool:'herb'},
 };
 function pickJob(s){
   const S = SEASONS[G.season];
@@ -525,6 +561,8 @@ function pickJob(s){
   w.fishfarm= (s.geo==='river'||s.geo==='coast'||s.geo==='swamp') ? 2 : .3;
   // 采者:附近有浆果丛
   w.gather = 1.2;
+  // 草药师(农业时代起):林地越密,药草越丰(Banished 式)
+  w.herb = G.era>=3 ? 1.4 : 0;
   // 矿工:青铜时代起,附近有矿脉
   w.mine = G.era>=4 ? 2 : 0;
   // 工匠(盖房修缮):受损时抢修,人满时扩建
@@ -733,7 +771,7 @@ function updateWalkers(dt){
           w.workT = 0;
           const ot = W.ORE[w.spot];
           home.store = Math.min(storeCap(home), home.store + (ot===3?20:ot===2?14:10));
-          G.knowledge += 8 + G.era*30; // 采矿催生冶炼知识
+          G.knowledge += 8 + G.era*30; G.counters.mined++; // 采矿催生冶炼知识
           if (ot===3) G.faith = Math.min(100, G.faith+.05);
           if (!G.flags.mineStory){
             G.flags.mineStory = true;
@@ -743,6 +781,33 @@ function updateWalkers(dt){
           if (Math.random()<.12) w.kind = pickJob(home);
         }
       } else { w.x += mdx2/md2*w.spd*dt; w.y += mdy2/md2*w.spd*dt; }
+      continue;
+    }
+    // 草药师:采集药草,防治疫病、延年益寿
+    if (w.kind==='herb'){
+      if (w.spot===undefined || W.TR[w.spot]===0){
+        let best=-1, bd=1e9;
+        const cx2=home.x|0, cy2=home.y|0, rr2=LEVELS[home.level].r+3;
+        for (let dy=-rr2;dy<=rr2;dy++) for (let dx=-rr2;dx<=rr2;dx++){
+          const x2=cx2+dx, y2=cy2+dy;
+          if (!inW(x2,y2)) continue;
+          const i2=y2*WORLD_W+x2;
+          if (W.TR[i2]>0){ const d2=dx*dx+dy*dy; if (d2<bd){ bd=d2; best=i2; } }
+        }
+        if (best<0){ w.kind=pickJob(home); continue; }
+        w.spot=best; w.tx=(best%WORLD_W)*TILE+7; w.ty=((best/WORLD_W)|0)*TILE+7;
+      }
+      const hx2=w.tx-w.x, hy2=w.ty-w.y, hd2=Math.hypot(hx2,hy2);
+      if (hd2 < 3.5){
+        w.workT=(w.workT||0)+dt;
+        if (w.workT > 6){
+          w.workT = 0;
+          home.herbs = Math.min(30, (home.herbs||0) + 3);
+          FX.burst(w.x, w.y, 4, '#8fce5a', 30);
+          w.spot = undefined;
+          if (Math.random()<.2) w.kind = pickJob(home);
+        }
+      } else { w.x += hx2/hd2*w.spd*dt; w.y += hy2/hd2*w.spd*dt; }
       continue;
     }
     // 渔人:驻足水岸,撒网养鱼
@@ -852,6 +917,96 @@ function updateWalkers(dt){
   if ((G.year&31)===0 || G.walkers.length>560)
     G.walkers = G.walkers.filter(w=> w.kind!=='dead' || w.deadT<8);
 }
+// —— 首领与王朝(CK 式):性格即命运 ——
+const CHIEF_NAMES = ['岩','风','火','川','岳','星','雷','霜','林','云','野','石'];
+function newChief(s){
+  const keys = Object.keys(CHIEF_TRAITS);
+  const tr = {};
+  tr[keys[(RNG()*keys.length)|0]] = CHIEF_TRAITS[keys[(RNG()*keys.length)|0]];
+  const nm = '阿' + CHIEF_NAMES[(RNG()*CHIEF_NAMES.length)|0];
+  return {name: nm, tr, since: G.year};
+}
+// —— 远古遗迹:聚落迁至遗迹附近,发现与研究(Myst 式:发现即奖励) ——
+function tickRuins(){
+  if (!W.RUIN) return;
+  for (const s of aliveSettlements()){
+    if (s.ruinFound) continue;
+    for (let dy=-4;dy<=4 && !s.ruinFound;dy++) for (let dx=-4;dx<=4;dx++){
+      const x=(s.x|0)+dx, y=(s.y|0)+dy;
+      if (!inW(x,y)) continue;
+      if (W.RUIN[y*WORLD_W+x]){
+        s.ruinFound = true;
+        const kn = 120 + G.era*800;
+        G.knowledge += kn;
+        G.faith = Math.min(100, G.faith+2);
+        const t = `【遗迹】${s.name} 的猎人在山坳里发现了倾颓的石柱群——那是先于人类存在的谜。他们拓下碑文,日夜参悟(知识+${kn})。`;
+        log(t, 'lg-story'); chron(t, 'story');
+        break;
+      }
+    }
+  }
+}
+function tickChiefs(){
+  for (const s of aliveSettlements()){
+    if (!s.chief) continue;
+    // 首领寿终(每季小概率,岁数越大越高)
+    const age = G.year - s.chief.since;
+    if (RNG() < .0006 + age*.00004){
+      const old = s.chief;
+      s.chief = newChief(s);
+      chron(`【王朝】${s.name} 的${CHIEF_TITLES[Math.min(G.era,5)]} ${old.name} 与世长辞,在位 ${age} 年;${s.chief.name} 继位,性格「${Object.keys(s.chief.tr)[0]}」。`, 'story');
+      G.morale = Math.max(0, G.morale-1.5);
+    }
+  }
+}
+// —— 祈愿(Black & White):子民向天空许愿;应愿则信仰升华,漠视则信仰流失 ——
+function tickWishes(){
+  // 每 40~80 季某部落生一愿
+  const alive = aliveSettlements();
+  if (alive.length && G.wishes.length < 2 && RNG() < .012){
+    const s = alive[(RNG()*alive.length)|0];
+    const kinds = [
+      {k:'food',  txt:`${s.name} 的族人在星空下祈祷:愿苍天赐下粮食。`, pw:'flood'},
+      {k:'rain',  txt:`${s.name} 遇上旱兆,长老们祈求一场甘霖。`, pw:'rain'},
+      {k:'warm',  txt:`${s.name} 畏惧寒冬,祈求阳光庇佑。`, pw:'sun'},
+      {k:'heal',  txt:`${s.name} 疫病缠身,举族向天祈求痊愈。`, pw:'heal'},
+      {k:'peace', txt:`${s.name} 厌倦了流血,祈求邻族罢兵言和。`, pw:'peace'},
+    ];
+    const pool = kinds.filter(k=>{
+      if (k.k==='heal') return !!s.plague;
+      if (k.k==='peace') return G.wars.length>0;
+      return true;
+    });
+    if (!pool.length) return;
+    const w = pool[(RNG()*pool.length)|0];
+    w.s = s.id; w.t = 0; w.dur = 60;
+    G.wishes.push(w);
+    log('🙏 ' + w.txt, 'lg-story');
+    chron('【祈愿】' + w.txt, 'god');
+  }
+  for (const w of [...G.wishes]){
+    w.t++;
+    const s = G.settlements[w.s];
+    if (!s || !s.alive){ G.wishes.splice(G.wishes.indexOf(w),1); continue; }
+    if (w.t > w.dur){
+      G.wishes.splice(G.wishes.indexOf(w),1);
+      G.faith = Math.max(0, G.faith-1.2);
+      log(`💭 ${s.name} 的祈祷没有得到回应,有人开始质疑神的存在……`, 'lg-bad');
+      chron(`【未应】${s.name} 的祈祷落空,疑神者渐多`, 'doom');
+    }
+  }
+}
+function tryAnswerWish(powerId){
+  for (const w of [...G.wishes]){
+    if (w.pw!==powerId) continue;
+    const s = G.settlements[w.s];
+    G.wishes.splice(G.wishes.indexOf(w),1);
+    G.faith = Math.min(100, G.faith+6);
+    if (s) s.store = Math.min(storeCap(s), s.store + 80);
+    G.counters.wishAns++; G.morale = Math.min(100, G.morale+5); log('✨ 祈愿应验!信徒们的欢呼响彻山谷。', 'lg-god');
+    chron('【应愿】祈祷得到了回应——信仰如潮水般高涨。', 'god');
+  }
+}
 function seasonalDisaster(){
   const pick = (arr) => arr[(RNG()*arr.length)|0];
   const landSpot = () => {
@@ -919,6 +1074,9 @@ function tickSim(){
   tickDisastersSim();
   // 上帝之外,天地自怒:四季各有其灾,迫使人类适应进化
   if (G.phase==='play' && RNG() < .016) seasonalDisaster();
+  tickWishes();
+  tickChiefs();
+  tickRuins();
   // 聚落(按季节调制收支与生长)
   for (const s of G.settlements) tickSettlement(s, S);
   // 战争与动物
@@ -958,9 +1116,33 @@ function tickSim(){
   // 知识与信仰(每季 1/4 年度值)
   G.knowledge += knowledgeGain()/4;
   const p = totalPop();
-  if (p>0) G.faith = Math.min(100, G.faith + .0008*Math.pow(p,.6)/4);
+  if (p>0) G.faith = Math.min(100, G.faith + .0022*Math.pow(p,.6)/4);
   // 时代演进
   eraCheck();
+  // 传世神器(Dwarf Fortress):历史时刻偶有神物诞生,铭文永载
+  if (G.era>=1 && !G.flags['art'+G.era] && G.year>30 && RNG() < .004){
+    const pool = ARTIFACTS.filter(a=>!G.flags[a.flag]);
+    if (pool.length){
+      const a = pool[(RNG()*pool.length)|0];
+      G.flags[a.flag] = true;
+      const s = aliveSettlements().length ? aliveSettlements()[(RNG()*aliveSettlements().length)|0] : null;
+      const t = `【神器】${s?s.name:''}的匠人穷尽一生,铸成传世神器「${a.id}」——${a.txt}`;
+      log(t, 'lg-story'); chron(t, 'story');
+      G.faith = Math.min(100, G.faith+2); G.morale = Math.min(100, G.morale+4);
+    }
+  }
+  // 灵感迸发(Civ 式尤里卡)
+  for (const ek of EUREKAS){
+    if (G.flags[ek.flag]) continue;
+    const [k, v] = ek.cond.split('>=');
+    if ((G.counters[k]||G.stats[k]||0) >= +v){
+      G.flags[ek.flag] = true;
+      G.knowledge += ERAS[G.era].kn * ek.kn + 40;
+      log('💡 ' + ek.txt, 'lg-good');
+      chron('【灵感】' + ek.txt, 'era');
+      G.faith = Math.min(100, G.faith+1);
+    }
+  }
   // 族人补充
   manageWalkers();
   // 自然恢复(每年开春一次)
@@ -974,6 +1156,27 @@ function tickSim(){
   }
   // 人性回归中庸
   if (G.nature) G.nature *= .999;
+  // 士气(Frostpunk 双轨:信仰管虔诚,士气管人心)
+  {
+    const alive = aliveSettlements();
+    let dm = 0;
+    if (G.fires.size>20 || G.iceT>0 || G.ashT>0) dm -= .35;
+    for (const s of alive){ if (s.famine) dm -= .12; if (s.plague) dm -= .10; if (s.damaged>.3) dm -= .05; }
+    if (G.wars.length) dm -= .15;
+    if (G.season===3) dm -= .03; // 冬日沉郁
+    if (G.wishes.length===0) dm += .04; // 无悬而未决的祈愿
+    G.faith = Math.min(100, G.faith + .004); // 日复一日的祷告
+    dm += .10; // 平时自然回暖
+    G.morale = Math.max(0, Math.min(100, G.morale + dm));
+    if (G.morale < 20 && !G.flags.despair){
+      G.flags.despair = true;
+      chron('【至暗时刻】哀鸿遍野,人心如死灰——孩子们不再唱歌了。', 'doom');
+      log('🌑 人心跌入谷底:生育与求知都停滞了。', 'lg-bad');
+    } else if (G.morale > 55 && G.flags.despair){
+      G.flags.despair = false;
+      chron('【重生】篝火旁再次响起了歌声。', 'culture');
+    }
+  }
   // 信仰过热的代价:教会掌权,求知受缚(Simmiland 式权衡)
   if (G.faith >= 95){
     G.faithHighT++;
@@ -1094,17 +1297,23 @@ function startWar(A,B,opts={}){
   setTimeout(()=>MUS.setTension(G.fires.size>25 || G.iceT>0 || G.ashT>0), 8000);
 }
 function resolveWar(w, A, B){
+  G.counters.warsSurv++;
+  for (const ws of [...G.wishes]){
+    if (ws.pw==='peace'){ G.wishes.splice(G.wishes.indexOf(ws),1); G.faith=Math.min(100,G.faith+5);
+      log('🕊 战争落幕,祈祷和平的族人热泪盈眶。', 'lg-good'); }
+  }
   endWarWalkers(w);
   const terrainB = (B.level>=2 ? 1.35 : 1) * (G.era>=2 ? 1.12 : 1); // 栅栏与城墙
   // 作坊与军工厂:武器代差决定战场
-  const atk = w.sent * (0.8+RNG()*.4) * (1+G.era*.15) * (A.armory?1.12:1) * (A.arsenal?1.25:1);
+  const atk = w.sent * (0.8+RNG()*.4) * (1+G.era*.15) * (A.armory?1.12:1) * (A.arsenal?1.25:1) * (G.flags.art_war?1.10:1) * ((A.chief&&A.chief.tr.勇武)?1.15:1);
   const def = B.pop * .55 * terrainB * (B.traits&&B.traits.martial?1.15:1) * (B.geo==='mountain'?1.1:1)
             * (B.armory?1.1:1) * (B.arsenal?1.2:1);
   const grind = G.era>=5 ? 1.55 : G.era>=4 ? 1.2 : 1; // 工业化:绞肉机
   const defLoss = Math.min(B.pop*.85, atk*(0.5+RNG()*.5)*grind);
   const atkLoss = Math.min(w.sent, def*(0.4+RNG()*.4)*grind);
   B.pop -= defLoss; w.sent -= atkLoss;
-  G.stats.deaths += defLoss + atkLoss;(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
+  G.stats.deaths += defLoss + atkLoss;
+  G.morale = Math.max(0, G.morale - 6);(G._dsrc=G._dsrc||{})._other=(G._dsrc._other||0)+1;
   G.faith = Math.max(0, G.faith - 2.5);
   FX.burst(B.tx, B.ty, 34, '#e05c4a', 100);
   FX.burst(B.tx, B.ty, 20, '#ffd86b', 70);
@@ -1164,8 +1373,8 @@ function tickWars(){
   // —— 宣战 ——
   const alive = aliveSettlements();
   if (G.era >= 1 && alive.length >= 2 && G.year >= (G.nextWarY||0)){
-    let chance = (.0012 + G.era*.0007) * (G.flags.lang ? .8 : 1) * (G.nature < -20 ? 1.3 : G.nature > 20 ? .85 : 1); // 人性:好战嗜血,和平向善
-    for (const s of alive) if (s.famine) chance += .0025;
+    let chance = (.0012 + G.era*.0007) * (G.flags.lang ? .8 : 1) * (G.nature < -20 ? 1.3 : G.nature > 20 ? .85 : 1) * (G.nature < -20 ? 1 : 1); // 人性:好战嗜血,和平向善
+    for (const s of alive){ if (s.famine) chance += .0025; if (s.chief && s.chief.tr.野心) chance += .002; }
     if (RNG() < chance){
       const attackers = alive.filter(s=>s.pop>20);
       if (attackers.length){
@@ -1402,6 +1611,7 @@ function manageFarmers(){
   }
 }
 function tickTrade(){
+  if (G.routes.length && G.phase==='play') G.counters.traded += G.routes.length;
   if (G.era < 2) return;
   // 建立新商路
   if (G.routes.length < 8 && RNG() < .15){

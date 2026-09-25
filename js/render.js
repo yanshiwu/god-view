@@ -512,6 +512,24 @@ function drawSettlements(){
       ctx.fillRect(ax2+4.4,ay2-.6,2.4,1);
       if (Math.random()<.05) FX.burst(ax2+5, ay2-1, 1, '#ffd86b', 18);
     }
+    if (s.shrine){
+      // 圣祠(山上):石台+圣火
+      const shx=tx+2, shy=ty-19;
+      ctx.fillStyle='#9a9184'; ctx.fillRect(shx-4,shy+1,8,2.2);
+      ctx.fillStyle='#b0a89c'; ctx.fillRect(shx-2.6,shy-1.6,5.2,2.8);
+      const fg = .6+Math.sin(T_*6+s.id)*.35;
+      ctx.fillStyle=`rgba(255,${150+fg*60|0},50,${fg})`;
+      ctx.beginPath(); ctx.ellipse(shx, shy-2.6, 1.6, 2.4+fg, 0, 0, 7); ctx.fill();
+    }
+    if (s.market){
+      // 市集(南):摊棚与条纹布幌,人来人往
+      const px2=tx-4, py2=ty+19;
+      ctx.fillStyle='#8a6a48'; ctx.fillRect(px2-5,py2-2,10,3);
+      ctx.fillStyle='#e0c88f';
+      for(let k=0;k<4;k++) ctx.fillRect(px2-5+k*2.6, py2-4.5, 2.2, 2.6);
+      ctx.fillStyle=`rgba(224,${120+(Math.sin(T_*3+s.id)*40|0)},90,.8)`;
+      ctx.fillRect(px2-5, py2-5.6, 10, 1.2);
+    }
     if (era>=5 && s.level>=2 && s.arsenal){
       // 军工厂(北):双烟囱厂房,浓烟滚滚
       const mx2=tx-2, my2=ty-22;

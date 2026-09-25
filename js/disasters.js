@@ -119,6 +119,7 @@ function castPower(id, wx, wy){ // wx,wy = 格坐标(浮点)
   const p = POWERS.find(q=>q.id===id);
   if (!p || !canCast(p)) return false;
   G.power -= p.cost;
+  if (typeof tryAnswerWish==='function') tryAnswerWish(id);
   G.cooldowns[id] = performance.now() + p.cd*1000;
   G.stats.cast++;
   if (p.group==='disaster'){ G.faith = Math.max(0, G.faith-1.6); G.nature = Math.max(-100, G.nature-3); chron(`神之怒 · ${p.name}降临大地`, 'god'); }
@@ -234,6 +235,25 @@ function castPower(id, wx, wy){ // wx,wy = 格坐标(浮点)
         log(`⛏️ 群山中显现${W.ORE[i2]===1?'铜':W.ORE[i2]===2?'铁':'金'}矿脉!`, 'lg-god');
       } else toast('此处已有矿脉', 2.5);
       break; }
+    case 'tribe': {
+      const t2 = tAt(wx|0, wy|0);
+      if (t2!==TER.GRASS && t2!==TER.FOREST){
+        toast('部落只能在草原或森林降生', 3);
+        G.power += p.cost;
+        break;
+      }
+      if (G.settlements.filter(s=>s.alive).length >= MAX_SETTLEMENTS + (G.flags.temple?2:0)){
+        toast('天地已满——部落数量已达上限', 3);
+        G.power += p.cost;
+        break;
+      }
+      spawnSettlement(wx|0, wy|0, 25, 0, null, null);
+      AU.chime ? AU.chime() : AU.click();
+      bigToast('🏕 神造之人', '一支新部落从大地中降生');
+      log('🏕 神迹:一支新部落凭空降生,他们仰望天空,认出了你。', 'lg-god');
+      G.faith = Math.min(100, G.faith+3);
+      break; }
+    case 'heal': break;
     case 'insight': {
       G.stats.miracles++; G.faith=Math.min(100,G.faith+3);
       const alive = aliveSettlements(); if (!alive.length) break;

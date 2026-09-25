@@ -56,6 +56,34 @@ const HUNT_METHOD = {
   wolf:    {name:'御狼卫戍', story:'御狼卫戍——猎人们围歼了袭人的狼群,从此聚落有了守夜人'},
 };
 
+// ---- 首领性格(CK 式):特质驱动部落叙事 ----
+const CHIEF_TRAITS = {
+  勇武: {txt:'亲率战士冲阵(战力+15%)', war:1.15},
+  智慧: {txt:'仰观星象,俯察万物(知识+12%)', kn:1.12},
+  仁德: {txt:'轻徭薄赋,与民休息(士气回暖更快)', morale:.3},
+  野心: {txt:'卧榻之侧不容他人酣睡(好战+40%)', warlike:1.4},
+  贪婪: {txt:'聚敛无度(收入+10%,士气缓降)', income:1.10},
+};
+const CHIEF_TITLES = ['首领','大酋长','长老会首','王','君王','皇帝'];
+
+// ---- 传世神器(Dwarf Fortress 式):每件都有铭文与故事 ----
+const ARTIFACTS = [
+  {id:'猎骨号角', txt:'以巨鹿之骨凿成的号角,吹响时百兽辟易(狩猎所得 +8%)', flag:'art_hunt'},
+  {id:'不熄火种', txt:'封存在龟甲里的一粒火种,据说从未熄灭(严寒伤害减轻)', flag:'art_fire'},
+  {id:'先知骨杖', txt:'刻满星图的骨杖,先知执之而能测风云(知识获取 +6%)', flag:'art_kn'},
+  {id:'百战石斧', txt:'七场战争留下的缺口,每一道都是一段传说(战力 +10%)', flag:'art_war'},
+];
+
+// ---- 灵感迸发(Civ 式尤里卡):行为催化研究 ----
+const EUREKAS = [
+  {flag:'ek_hunt',   cond:'hunted>=20',   txt:'猎物满山——追猎的耐心中,他们悟出了合作的阵法(狩猎×20,研究加速)', kn:.06},
+  {flag:'ek_harvest',cond:'harvests>=30', txt:'首次囤粮过冬——农事的节律教会了他们丈量时间(丰收×30,研究加速)', kn:.08},
+  {flag:'ek_mine',   cond:'mined>=10',    txt:'凿岩取铜——火与石的合鸣里,冶炼的秘密自己浮现(采矿×10,研究加速)', kn:.10},
+  {flag:'ek_trade',  cond:'traded>=5',    txt:'商队往来——陌生的语言里藏着别的星辰(贸易×5,研究加速)', kn:.08},
+  {flag:'ek_war',    cond:'warsSurv>=3',  txt:'三次战争淬炼——血的教训是最好的老师(战争×3,研究加速)', kn:.08},
+  {flag:'ek_wish',   cond:'wishAns>=3',   txt:'三次祈愿应验——对天空的凝视变成了对万物的追问(应愿×3,研究加速)', kn:.08},
+];
+
 // ---- 武器谱系:战争剧情随时代演进 ----
 const WEAPON_NAMES = [
   '木棒与掷石',        // 0 蒙昧
@@ -150,6 +178,8 @@ const POWERS = [
    desc:'种下浆果丛——采集者的四季口粮。'},
   {id:'ore',    icon:'⛏️', name:'现矿', cost:10, cd:5,  group:'bless', dur:0,
    desc:'群山中显现矿脉(铜/铁/金)。'},
+  {id:'tribe',  icon:'🏕', name:'造部落', cost:40, cd:20, group:'bless', dur:0,
+   desc:'在宜居之地直接降生一支新部落(WorldBox 式造物)。'},
   {id:'insight',  icon:'💡', name:'神启', cost:25, cd:30, group:'bless',
    desc:'向最大的聚落降下灵感:知识 + 剩余需求的 8%。'},
 ];
