@@ -13,7 +13,7 @@ function newGame(){
     flags:{}, adaptations:{},
     settlements:[], walkers:[], pendingMig:[],
     herds:[], wars:[], warSeq:0, nextWarY:80,
-    chronicle:[], relations:{}, colSeq:0, routes:[], season:0, clim:null,
+    chronicle:[], relations:{}, colSeq:0, routes:[], season:0, clim:null, ruins:[],
     fires:new Map(), weatherZones:[], ashT:0, iceT:0, windT:0,
     stats:{born:0, deaths:0, cast:0, survived:0, miracles:0, storyPop:0, wars:0, hunted:0, harvests:0},
     cooldowns:{}, lastCause:'严酷的自然',
@@ -235,6 +235,8 @@ function tickSettlement(s, S){
 }
 function destroySettlement(s, why){
   s.alive = false; G.stats.deaths += s.pop; s.pop = 0;
+  // 留下废墟:断壁残垣随岁月渐渐湮灭,而非凭空消失
+  G.ruins.push({x:s.tx, y:s.ty, t:0, col:s.col||'#c9a53f', level:s.level});
   chron(`${s.name}${why==='衰亡'?'在岁月中消逝':'毁灭于'+(causeName(why)||why)}`, 'doom');
   log(`${s.name} 已从地图上${why==='衰亡'?'消逝':'被抹去'}。`, 'lg-bad');
   for (let i=0;i<W.FARM.length;i++) if (W.FARM[i]===s.id+1) W.FARM[i]=0;
@@ -457,21 +459,60 @@ function grantAdapt(id, s){
   if (s) FX.ring(s.tx, s.ty, 90, '#6fd08c');
   uiRefreshAdapt();
 }
+// ---- 劳役分配:聚落按时代/季节/地理给子民派活 ----
+const JOBS = {
+  farm:    {icon:'🌾', name:'农夫', tool:'hoe'},
+  hunt:    {icon:'🏹', name:'猎户', tool:'bow'},
+  mulberry:{icon:'🐛', name:'蚕娘', tool:'basket'},
+  plant:   {icon:'🌱', name:'树人', tool:'sapling'},
+  fishfarm:{icon:'🎣', name:'渔人', tool:'rod'},
+  build:   {icon:'🔨', name:'工匠', tool:'hammer'},
+};
+function pickJob(s){
+  const S = SEASONS[G.season];
+  const w = {};
+  // 农夫:农业时代起,春夏秋忙、冬闲
+  w.farm    = G.era>=3 ? (S.growth>0 ? 4 : .4) : 0;
+  // 猎户:始终有,冬季与狩猎时代更多
+  w.hunt    = (G.era>=3 ? 1 : 3) * (S.name==='冬' ? 1.8 : 1);
+  // 蚕娘(采桑养蚕):农业时代起,春夏为采桑季
+  w.mulberry= G.era>=3 ? (S.name==='春'||S.name==='夏' ? 1.6 : .5) : 0;
+  if (s.geo==='forest') w.mulberry *= 1.6;
+  // 树人(种树):火焰时代起,春天造林
+  w.plant   = (G.era>=2 ? (S.name==='春' ? 1.4 : .3) : .15);
+  // 渔人(养鱼):水边聚落才有正经渔养
+  w.fishfarm= (s.geo==='river'||s.geo==='coast'||s.geo==='swamp') ? 2 : .3;
+  // 工匠(盖房修缮):受损时抢修,人满时扩建
+  w.build   = (s.damaged>.05 || s.pop>LEVELS[s.level].cap*.75) ? 2.2 : .4;
+  // 加权抽取
+  let sum = 0; for (const k in w) sum += w[k];
+  let r = RNG()*sum;
+  for (const k in w){ r -= w[k]; if (r<=0) return k; }
+  return 'hunt';
+}
 function manageWalkers(){
   const alive = aliveSettlements();
   let total = G.walkers.length;
   for (const s of alive){
     const want = Math.min(22, Math.ceil(Math.pow(s.pop,.55)));
-    let have = 0;
-    for (const w of G.walkers) if (w.home===s.id && w.kind!=='dead') have++;
+    let have = 0, idle = 0;
+    for (const w of G.walkers){
+      if (w.home!==s.id || w.kind==='dead') continue;
+      have++;
+      if (w.kind==='walk') idle++;
+    }
+    // 新生子民直接上岗
     if (have < want && total < 520){
       const n = Math.min(want-have, 3);
       for (let k=0;k<n;k++){
         G.walkers.push({ x:s.tx+rnd(-14,14), y:s.ty+rnd(-14,14), tx:s.tx, ty:s.ty,
-          home:s.id, spd:12+RNG()*10, kind:'walk', ph:RNG()*7 });
+          home:s.id, spd:12+RNG()*10, kind:pickJob(s), ph:RNG()*7 });
         total++;
       }
     }
+    // 闲民每年重新派活
+    for (const w of G.walkers)
+      if (w.home===s.id && w.kind==='walk') w.kind = pickJob(s);
   }
 }
 function updateWalkers(dt){
@@ -513,9 +554,9 @@ function updateWalkers(dt){
       if (cd < 4){
         const A=G.settlements[w.home], B=G.settlements[w.dest];
         if (A && A.alive && B && B.alive){
+          const carry = G.flags.wheel ? 14 : 8; // 轮子:商车载重翻倍
           A.store = Math.max(0, A.store-carry);
           B.store = Math.min(storeCap(B), B.store+carry);
-          const carry = G.flags.wheel ? 14 : 8; // 轮子:商车载重翻倍
           if (w.trade && RNG() < .25) G.knowledge += (15 + G.era*60) * ((G.settlements[w.home].geo==='river'||G.settlements[w.home].geo==='coast')?1.5:1); // 商旅传播见闻(水路更快更广)
         }
         w.kind='dead'; w.deadT=0;
@@ -524,10 +565,119 @@ function updateWalkers(dt){
       }
       continue;
     }
+    // 蚕娘:采桑养蚕,丝帛换粮
+    if (w.kind==='mulberry'){
+      if (w.jobT===undefined){
+        const t2 = findTileNear(home, t=>t===TER.FOREST, 6);
+        if (t2){ w.tx=t2.x*TILE+7; w.ty=t2.y*TILE+7; w.jobT=0; }
+        else { w.kind = w.kind==='mulberry' ? 'farm' : pickJob(home); continue; }
+      }
+      const mdx=w.tx-w.x, mdy=w.ty-w.y, md=Math.hypot(mdx,mdy);
+      if (md < 4){
+        w.jobT++;
+        if (w.jobT > 10){
+          home.store = Math.min(storeCap(home), home.store+9);
+          if (!G.flags.silkStory){
+            G.flags.silkStory = true;
+            const t = '采桑养蚕:蚕娘们以桑叶喂蚕,抽丝织帛,换回满满的粮仓。';
+            log('【民生】'+t, 'lg-story'); chron(t, 'culture');
+          }
+          FX.burst(w.x, w.y, 6, '#b8e07a', 40);
+          w.jobT = undefined; w.kind = pickJob(home);
+        }
+      } else { w.x += mdx/md*w.spd*dt; w.y += mdy/md*w.spd*dt; }
+      continue;
+    }
+    // 树人:春天造林,荒地栽下树苗
+    if (w.kind==='plant'){
+      if (w.spot===undefined){
+        const t2 = findTileNear(home, t=>(t===TER.GRASS||t===TER.HILL), 4);
+        if (t2){
+          const i = t2.y*WORLD_W+t2.x;
+          if (W.TR[i]===0 && W.FARM[i]===0){ w.spot=i; w.tx=t2.x*TILE+7; w.ty=t2.y*TILE+7; }
+          else { w.kind=pickJob(home); continue; }
+        } else { w.kind=pickJob(home); continue; }
+      }
+      const pdx=w.tx-w.x, pdy=w.ty-w.y, pd=Math.hypot(pdx,pdy);
+      if (pd < 4){
+        if (W.TR[w.spot]===0){
+          W.TR[w.spot]=1; bakeTile(w.spot%WORLD_W,(w.spot/WORLD_W)|0); miniDirty=true;
+          G.stats.planted = (G.stats.planted||0)+1;
+          if (G.stats.planted===30){
+            const t = '十年树木:他们年年栽下树苗,山川渐渐重新披绿。';
+            log('【民生】'+t, 'lg-story'); chron(t, 'culture');
+          }
+          FX.burst(w.x, w.y, 5, '#7da35a', 36);
+        }
+        w.spot = undefined; w.kind = pickJob(home);
+      } else { w.x += pdx/pd*w.spd*dt; w.y += pdy/pd*w.spd*dt; }
+      continue;
+    }
+    // 渔人:驻足水岸,撒网养鱼
+    if (w.kind==='fishfarm'){
+      if (w.bank===undefined){
+        const t2 = findTileNear(home, t=>TERR[t].water, 3);
+        if (t2){ w.bank=1; w.tx=t2.x*TILE+5; w.ty=t2.y*TILE+5; }
+        else { w.kind = w.kind==='fishfarm' ? 'farm' : pickJob(home); continue; }
+      }
+      const fdx=w.tx-w.x, fdy=w.ty-w.y, fd=Math.hypot(fdx,fdy);
+      if (fd < 3){
+        w.workT = (w.workT||0)+dt;
+        if (Math.random()<.02) FX.burst(w.x+2, w.y, 3, '#a8d8f0', 26);
+        if (w.workT > 7){
+          home.store = Math.min(storeCap(home), home.store+7);
+          w.workT = 0;
+          if (Math.random()<.1) w.kind = pickJob(home);
+        }
+      } else { w.x += fdx/fd*w.spd*dt; w.y += fdy/fd*w.spd*dt; }
+      continue;
+    }
+    // 工匠:修缮受损的房屋,人满时为新居打地基
+    if (w.kind==='build'){
+      const need = home.damaged > .05;
+      if (!need && home.pop <= LEVELS[home.level].cap*.75){ w.kind=pickJob(home); continue; }
+      if (w.site===undefined || Math.hypot(w.tx-w.x,w.ty-w.y)<3 && w.jobT>12){
+        const r2 = 6 + home.level*5;
+        w.site = 1; w.jobT = 0;
+        w.tx = home.tx + rnd(-r2,r2)*.8; w.ty = home.ty + rnd(-r2,r2)*.8;
+      }
+      const bdx=w.tx-w.x, bdy=w.ty-w.y, bd=Math.hypot(bdx,bdy);
+      if (bd < 3){
+        w.jobT = (w.jobT||0)+dt;
+        if (Math.random()<.02) FX.smoke(w.x, w.y-4, 1, 'rgba(180,160,130,.5)');
+        if (need) home.damaged = Math.max(0, home.damaged - .008*dt);
+        if (w.jobT > 14){
+          if (!need && Math.random()<.5){
+            FX.burst(w.tx, w.ty, 8, '#c9a06a', 50);
+            home.store = Math.max(0, home.store-4); // 建材
+          }
+          w.jobT = 0;
+          if (Math.random()<.3) w.kind = pickJob(home);
+        }
+      } else { w.x += bdx/bd*w.spd*dt; w.y += bdy/bd*w.spd*dt; }
+      continue;
+    }
     // 猎人:追逐兽群/鱼群,得手后满载而归
     if (w.kind==='hunt'){
       const h = w.prey;
-      if (!h || h.dead || h.n<1){ w.kind='walk'; continue; }
+      if (!h || h.dead || h.n<1){
+        // 巡猎:向远方荒野推进,途中遇上兽群则追猎
+        let prey=null, pd=1e9;
+        for (const h2 of G.herds){
+          const d = Math.hypot(h2.x*TILE-w.x, h2.y*TILE-w.y);
+          if (d<pd){ pd=d; prey=h2; }
+        }
+        if (prey && pd < 90) w.prey = prey;
+        else {
+          if (Math.hypot(w.tx-w.x, w.ty-w.y) < 5){
+            const a = RNG()*Math.PI*2, d2 = 60+RNG()*80;
+            w.tx = w.x+Math.cos(a)*d2; w.ty = w.y+Math.sin(a)*d2;
+          }
+          const sdx=w.tx-w.x, sdy=w.ty-w.y, sd2=Math.hypot(sdx,sdy);
+          if (sd2>.1){ w.x+=sdx/sd2*w.spd*dt; w.y+=sdy/sd2*w.spd*dt; }
+        }
+        continue;
+      }
       // 渔猎不下水:目标点向聚落方向偏移,留在岸上
       w.tx = h.x*TILE; w.ty = h.y*TILE;
       if (h.kind==='fish'){ w.tx += (home.tx-w.tx)*.22; w.ty += (home.ty-w.ty)*.22; }
@@ -621,6 +771,9 @@ function tickSim(){
   manageWalkers();
   // 自然恢复(每年开春一次)
   if (newYear) natureHeal();
+  // 废墟风化(约30年湮灭)
+  for (const r of G.ruins) r.t++;
+  G.ruins = G.ruins.filter(r=>r.t<120);
   // 深度气候波动:8.2千年事件式寒潮 / 全新世暖期(压力与馈赠交替)
   if (newYear){
     if (G.clim){

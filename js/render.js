@@ -112,6 +112,7 @@ function render(dt){
     drawFarms(x0,y0,x1,y1);
     if (G.era>=4) drawRoads();
     drawLavaGlow(x0,y0,x1,y1);
+    drawRuins();
     drawFauna(x0,y0,x1,y1);
     if (G.era>=3) drawTradeRoutes();
     drawLifeProps(x0,y0,x1,y1);
@@ -214,6 +215,24 @@ function drawTradeRoutes(){
     ctx.stroke();
   }
   ctx.setLineDash([]);
+}
+
+// 废墟:被毁聚落的断壁残垣,随岁月淡去
+function drawRuins(){
+  if (!G || !G.ruins || !G.ruins.length) return;
+  for (const r of G.ruins){
+    const a = Math.max(0, 1 - r.t/120);
+    ctx.globalAlpha = a*.9;
+    for (let k=0;k<4+(r.level||0);k++){
+      const hx = r.x + Math.cos(k*1.7 + r.x*.01)*9, hy = r.y + Math.sin(k*1.9 + r.x*.01)*7;
+      ctx.fillStyle = '#4a4038';
+      ctx.fillRect(hx-2.5, hy-2, 5, 4);
+      ctx.strokeStyle = '#332c26'; ctx.lineWidth=.8;
+      ctx.beginPath(); ctx.moveTo(hx-2.5,hy-2); ctx.lineTo(hx,hy-4.5); ctx.lineTo(hx+2.5,hy-2); ctx.stroke();
+    }
+    if (r.t < 20 && Math.random()<.1) FX.smoke(r.x+(Math.random()*14-7), r.y, 1, 'rgba(90,80,70,.45)');
+    ctx.globalAlpha = 1;
+  }
 }
 
 // 百姓生活:粮垛 / 晾皮(布)架 / 市集
@@ -391,13 +410,26 @@ function drawSettlements(){
     ctx.beginPath(); ctx.moveTo(fx, fy-8); ctx.lineTo(fx+6+Math.sin(T_*3+s.id)*1.2, fy-6.5); ctx.lineTo(fx, fy-5); ctx.closePath(); ctx.fill();
 
     const style = HOUSE_STYLE[era];
+    // 规划布局:内环5座+外环扩展,围绕中央广场有序排布(朝向一致)
     const n = [3,5,9,14,18][s.level];
     for (let k=0;k<n;k++){
-      const a = hash2(s.id*31+k, k*7)*Math.PI*2;
-      const rr = 3 + hash2(k, s.id*13)*(6+s.level*6);
+      const ring = k<5 ? 1 : 2;
+      const idx = ring===1 ? k : k-5;
+      const cnt = ring===1 ? Math.min(5,n) : Math.ceil((n-5)/2);
+      const a = (idx/cnt)*Math.PI*2 + s.id*.6 + (ring-1)*.35;
+      const rr = ring===1 ? 5+s.level*2.5 : 11+s.level*3.5;
       const bx = tx+Math.cos(a)*rr, by = ty+Math.sin(a)*rr;
-      const sc = .8 + hash2(k*3,k*11)*.5 + (s.level>=3?.3:0);
+      const sc = (ring===1?1:.82) + (s.level>=3?.25:0);
       drawHouse(bx,by,sc,style, era, k, s);
+    }
+    // 中央广场:时代越晚越规整(土坪→石板十字路)
+    if (era>=2){
+      ctx.strokeStyle = era>=4 ? 'rgba(150,140,120,.5)' : 'rgba(120,100,70,.45)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(tx-8-s.level*2, ty); ctx.lineTo(tx+8+s.level*2, ty);
+      ctx.moveTo(tx, ty-8-s.level*2); ctx.lineTo(tx, ty+8+s.level*2);
+      ctx.stroke();
     }
     // 城墙:火焰时代起立起木栅,青铜后为石墙(耶利哥式)
     if (era>=2){
@@ -412,6 +444,36 @@ function drawSettlements(){
       const fl = .6+.4*Math.sin(T_*7+s.id);
       ctx.fillStyle=`rgba(255,${140+fl*80|0},40,${.7*fl+.3})`;
       ctx.beginPath(); ctx.arc(tx,ty,2.4,0,7); ctx.fill();
+    }
+    // 职业建筑:规划布局,各据一方
+    if (era>=3 && s.store > storeCap(s)*.3){
+      // 粮仓(东北)
+      const gx=tx+17, gy=ty-17;
+      ctx.fillStyle='#a08050'; ctx.fillRect(gx-3.5,gy-3,7,6);
+      ctx.fillStyle=shade(tcol,.8);
+      ctx.beginPath(); ctx.moveTo(gx-4.5,gy-3); ctx.lineTo(gx,gy-8); ctx.lineTo(gx+4.5,gy-3); ctx.closePath(); ctx.fill();
+    }
+    if (era>=4 && s.level>=2){
+      // 工坊(西南):烟囱小屋
+      const wx2=tx-19, wy2=ty+12;
+      ctx.fillStyle='#7a7a82'; ctx.fillRect(wx2-4,wy2-2,8,5);
+      ctx.fillStyle='#55555c'; ctx.fillRect(wx2-1,wy2-6,2,4);
+      if (Math.random()<.02) FX.smoke(wx2, wy2-7, 1, 'rgba(120,120,128,.4)');
+    }
+    if (era>=3 && G.flags.silkStory){
+      // 蚕房(西北):晾丝架小屋
+      const sx2=tx-17, sy2=ty-15;
+      ctx.fillStyle='#c8b88a'; ctx.fillRect(sx2-4,sy2-2,8,4.5);
+      ctx.fillStyle='#fff8e8';
+      for(let k=0;k<3;k++) ctx.fillRect(sx2-3+k*2.4, sy2-1, 1.5, 2.4);
+    }
+    if (era>=2 && (s.geo==='forest'||s.geo==='grass'||s.geo==='tundra')){
+      // 木料场(东南):堆叠原木
+      const lx=tx+19, ly=ty+13;
+      ctx.fillStyle='#8a6a48';
+      for(let k=0;k<3;k++) ctx.fillRect(lx-4, ly-2+k*1.5, 7, 1.1);
+      ctx.strokeStyle='#5a4028'; ctx.lineWidth=.7;
+      ctx.beginPath(); ctx.moveTo(lx-4, ly+1); ctx.lineTo(lx+3, ly+1); ctx.stroke();
     }
     // 地理智慧造物
     if (s.geo==='river' && era>=3){
@@ -449,6 +511,17 @@ function drawSettlements(){
       ctx.beginPath(); ctx.arc(s._well.x, s._well.y, 1.6, 0, 7); ctx.fill();
       ctx.strokeStyle='#6d5335'; ctx.lineWidth=1;
       ctx.beginPath(); ctx.moveTo(s._well.x, s._well.y-3); ctx.lineTo(s._well.x+3, s._well.y-7); ctx.stroke();
+    }
+    // 工匠脚手架(受损或扩建中)
+    if (s.damaged>.05 || (s.pop > LEVELS[s.level].cap*.75 && s.level < ERAS[G.era].lv)){
+      const bx = tx+12, by = ty+10;
+      ctx.strokeStyle='rgba(140,110,70,.85)'; ctx.lineWidth=1;
+      ctx.strokeRect(bx-3, by-5, 6, 5);
+      ctx.beginPath();
+      ctx.moveTo(bx-3, by-5); ctx.lineTo(bx+3, by);
+      ctx.moveTo(bx+3, by-5); ctx.lineTo(bx-3, by);
+      ctx.stroke();
+      if (Math.random()<.06) FX.smoke(bx, by-6, 1, 'rgba(180,160,130,.5)');
     }
     // 工业烟囱
     if (era>=5 && s.level>=3 && Math.random()<.25) FX.smoke(tx+(hash2(s.id,3)*14-7), ty-4, 1, 'rgba(90,90,95,.4)');
@@ -586,6 +659,23 @@ function drawWalkers(){
     } else if (w.kind==='hunt'){ // 猎弓
       ctx.strokeStyle='#c9b183'; ctx.lineWidth=.7;
       ctx.beginPath(); ctx.arc(w.x+2.4, w.y+bob-1, 1.7, -1.2, 1.2); ctx.stroke();
+    } else if (w.kind==='mulberry'){ // 桑篮
+      ctx.fillStyle='#8a6a48'; ctx.fillRect(w.x+1.6, w.y+bob-.4, 2.2, 1.6);
+      ctx.fillStyle='#8fce5a'; ctx.fillRect(w.x+2.2, w.y+bob-1.2, 1.2, 1);
+    } else if (w.kind==='plant'){ // 树苗
+      ctx.strokeStyle='#5a8a3a'; ctx.lineWidth=.8;
+      ctx.beginPath(); ctx.moveTo(w.x+2.4, w.y+bob+1); ctx.lineTo(w.x+2.4, w.y+bob-2); ctx.stroke();
+      ctx.fillStyle='#7da35a';
+      ctx.beginPath(); ctx.arc(w.x+2.4, w.y+bob-2.4, 1.1, 0, 7); ctx.fill();
+    } else if (w.kind==='fishfarm'){ // 钓竿
+      ctx.strokeStyle='#8a7a5a'; ctx.lineWidth=.7;
+      ctx.beginPath(); ctx.moveTo(w.x+1, w.y+bob); ctx.lineTo(w.x+4.2, w.y+bob-4.2); ctx.stroke();
+      ctx.strokeStyle='rgba(200,220,240,.7)';
+      ctx.beginPath(); ctx.moveTo(w.x+4.2, w.y+bob-4.2); ctx.lineTo(w.x+4.2, w.y+bob-1); ctx.stroke();
+    } else if (w.kind==='build'){ // 铁锤
+      ctx.strokeStyle='#7a6a4a'; ctx.lineWidth=.8;
+      ctx.beginPath(); ctx.moveTo(w.x+1, w.y+bob+.6); ctx.lineTo(w.x+3.2, w.y+bob-2); ctx.stroke();
+      ctx.fillStyle='#9a9aa2'; ctx.fillRect(w.x+2.4, w.y+bob-3.2, 2, 1.6);
     } else if (w.kind==='farm'){ // 锄头
       ctx.strokeStyle='#8a6a48'; ctx.lineWidth=.8;
       ctx.beginPath(); ctx.moveTo(w.x+1, w.y+bob+1); ctx.lineTo(w.x+3, w.y+bob-2.6); ctx.stroke();
