@@ -62,6 +62,9 @@ function uiHUD(){
   }
   $('st-food').textContent = stTxt;
   const SS = SEASONS[G.season];
+  const sn=$('st-nature');
+  if (sn){ sn.textContent = G.nature>30?'😇和平':G.nature<-30?'😈好战':'😐中庸';
+           sn.style.color = G.nature>30?'#8fe08f':G.nature<-30?'#e08f8f':''; }
   $('st-season').textContent = SS.icon + SS.name;
   $('bar-pow').style.transform = `scaleX(${G.power/POWER_MAX})`;
   $('st-pow').textContent = Math.floor(G.power);

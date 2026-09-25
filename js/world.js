@@ -151,6 +151,26 @@ function genWorld(seed){
       }
     }
   }
+  // ---- 浆果丛:林缘的四季口粮 ----
+  W.BERRY = new Uint8Array(WORLD_W*WORLD_H);
+  for (let n=0;n<900;n++){
+    const x=(RNG()*WORLD_W)|0, y=(RNG()*WORLD_H)|0, i=y*WORLD_W+x;
+    if ((W.T[i]===TER.GRASS || W.T[i]===TER.FOREST) && W.BERRY[i]===0 && W.FARM[i]===0){
+      W.BERRY[i]=1;
+    }
+  }
+  // ---- 矿脉:群山中的铜铁金 ----
+  W.ORE = new Uint8Array(WORLD_W*WORLD_H); // 1铜 2铁 3金
+  let oreN=0;
+  for (let n=0;n<8000 && oreN<70;n++){
+    const x=(RNG()*WORLD_W)|0, y=(RNG()*WORLD_H)|0, i=y*WORLD_W+x;
+    const t=W.T[i];
+    if ((t===TER.MOUNT || t===TER.HILL || t===TER.PEAK) && W.ORE[i]===0){
+      const r2=RNG();
+      W.ORE[i] = r2<.55 ? 1 : r2<.87 ? 2 : 3;
+      oreN++;
+    }
+  }
   bakeAll();
 }
 
@@ -210,6 +230,22 @@ function bakeTile(x,y){
     c.beginPath(); c.arc(tx, ty+1, 2.6, 0, 7); c.fill();
     c.fillStyle = dark? '#4e6b40' : '#417a36';
     c.beginPath(); c.arc(tx-.6, ty-.3, 2.0, 0, 7); c.fill();
+  }
+  // 浆果丛
+  if (W.BERRY && W.BERRY[i]){
+    ctx.fillStyle='#4a7a3a';
+    ctx.beginPath(); ctx.arc(px+7,py+8,3.4,0,7); ctx.fill();
+    ctx.fillStyle='#c04a5a';
+    for(let k=0;k<3;k++) { ctx.beginPath(); ctx.arc(px+5.4+k*1.7, py+7+(k%2)*1.4, .7, 0, 7); ctx.fill(); }
+  }
+  // 矿脉:岩上矿斑(铜橙/铁灰/金黄)
+  if (W.ORE && W.ORE[i]){
+    const oc = W.ORE[i]===1 ? '#d08a4a' : W.ORE[i]===2 ? '#9aa2ac' : '#e8c84a';
+    ctx.fillStyle='#6e6a66';
+    ctx.beginPath(); ctx.arc(px+7,py+8,3,0,7); ctx.fill();
+    ctx.fillStyle=oc;
+    ctx.fillRect(px+5.4,py+6.6,1.4,1.4);
+    ctx.fillRect(px+7.6,py+8.2,1.2,1.2);
   }
   // 焦黑
   if (W.SC[i] > .02){

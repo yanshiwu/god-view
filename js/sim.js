@@ -13,7 +13,7 @@ function newGame(){
     flags:{}, adaptations:{},
     settlements:[], walkers:[], pendingMig:[],
     herds:[], wars:[], warSeq:0, nextWarY:80,
-    chronicle:[], relations:{}, colSeq:0, routes:[], season:0, clim:null, ruins:[],
+    chronicle:[], relations:{}, colSeq:0, routes:[], season:0, clim:null, ruins:[], nature:0, faithHighT:0,
     fires:new Map(), weatherZones:[], ashT:0, iceT:0, windT:0,
     stats:{born:0, deaths:0, cast:0, survived:0, miracles:0, storyPop:0, wars:0, hunted:0, harvests:0},
     cooldowns:{}, lastCause:'严酷的自然',
@@ -352,6 +352,7 @@ function knowledgeGain(){
   if (p<1) return 0;
   let k = ERAS[G.era].sci * Math.pow(p, .78);
   if (G.flags.fire) k *= 1.15;      // 烹饪假说:熟食提供更多热量养活大脑
+  if (G.flags.theocracy) k *= .75;  // 教会掌权:求知受缚
   if (G.faith > 80) k *= 1.25;      // 众志成城
   return k;
 }
@@ -467,6 +468,8 @@ const JOBS = {
   plant:   {icon:'🌱', name:'树人', tool:'sapling'},
   fishfarm:{icon:'🎣', name:'渔人', tool:'rod'},
   build:   {icon:'🔨', name:'工匠', tool:'hammer'},
+  gather:  {icon:'🫐', name:'采者', tool:'basket'},
+  mine:    {icon:'⛏️', name:'矿工', tool:'pick'},
 };
 function pickJob(s){
   const S = SEASONS[G.season];
@@ -482,6 +485,10 @@ function pickJob(s){
   w.plant   = (G.era>=2 ? (S.name==='春' ? 1.4 : .3) : .15);
   // 渔人(养鱼):水边聚落才有正经渔养
   w.fishfarm= (s.geo==='river'||s.geo==='coast'||s.geo==='swamp') ? 2 : .3;
+  // 采者:附近有浆果丛
+  w.gather = 1.2;
+  // 矿工:青铜时代起,附近有矿脉
+  w.mine = G.era>=4 ? 2 : 0;
   // 工匠(盖房修缮):受损时抢修,人满时扩建
   w.build   = (s.damaged>.05 || s.pop>LEVELS[s.level].cap*.75) ? 2.2 : .4;
   // 加权抽取
@@ -611,6 +618,64 @@ function updateWalkers(dt){
         }
         w.spot = undefined; w.kind = pickJob(home);
       } else { w.x += pdx/pd*w.spd*dt; w.y += pdy/pd*w.spd*dt; }
+      continue;
+    }
+    // 采者:寻找浆果丛,采摘入仓(丛会再生)
+    if (w.kind==='gather'){
+      if (w.spot===undefined || !W.BERRY[w.spot]){
+        let best=-1, bd=1e9;
+        const cx2=home.x|0, cy2=home.y|0, rr2=LEVELS[home.level].r+3;
+        for (let dy=-rr2;dy<=rr2;dy++) for (let dx=-rr2;dx<=rr2;dx++){
+          const x2=cx2+dx, y2=cy2+dy;
+          if (!inW(x2,y2)) continue;
+          const i2=y2*WORLD_W+x2;
+          if (W.BERRY[i2]){ const d2=dx*dx+dy*dy; if (d2<bd){ bd=d2; best=i2; } }
+        }
+        if (best<0){ w.kind=pickJob(home); continue; }
+        w.spot=best; w.tx=(best%WORLD_W)*TILE+7; w.ty=((best/WORLD_W)|0)*TILE+7;
+      }
+      const gdx=w.tx-w.x, gdy=w.ty-w.y, gd=Math.hypot(gdx,gdy);
+      if (gd < 3.5){
+        W.BERRY[w.spot]=0; bakeTile(w.spot%WORLD_W,(w.spot/WORLD_W)|0);
+        home.store = Math.min(storeCap(home), home.store+10);
+        w.spot = undefined;
+        if (Math.random()<.15) w.kind = pickJob(home);
+        FX.burst(w.x, w.y, 5, '#c04a5a', 36);
+      } else { w.x += gdx/gd*w.spd*dt; w.y += gdy/gd*w.spd*dt; }
+      continue;
+    }
+    // 矿工:开采矿脉(铜铁金),产出与知识
+    if (w.kind==='mine'){
+      if (w.spot===undefined || !W.ORE[w.spot]){
+        let best=-1, bd=1e9;
+        const cx2=home.x|0, cy2=home.y|0, rr2=LEVELS[home.level].r+4;
+        for (let dy=-rr2;dy<=rr2;dy++) for (let dx=-rr2;dx<=rr2;dx++){
+          const x2=cx2+dx, y2=cy2+dy;
+          if (!inW(x2,y2)) continue;
+          const i2=y2*WORLD_W+x2;
+          if (W.ORE[i2]){ const d2=dx*dx+dy*dy; if (d2<bd){ bd=d2; best=i2; } }
+        }
+        if (best<0){ w.kind=pickJob(home); continue; }
+        w.spot=best; w.tx=(best%WORLD_W)*TILE+7; w.ty=((best/WORLD_W)|0)*TILE+7;
+      }
+      const mdx2=w.tx-w.x, mdy2=w.ty-w.y, md2=Math.hypot(mdx2,mdy2);
+      if (md2 < 3){
+        w.workT = (w.workT||0)+dt;
+        if (Math.random()<.03) FX.burst(w.x, w.y, 3, '#d8c890', 30);
+        if (w.workT > 9){
+          w.workT = 0;
+          const ot = W.ORE[w.spot];
+          home.store = Math.min(storeCap(home), home.store + (ot===3?20:ot===2?14:10));
+          G.knowledge += 8 + G.era*30; // 采矿催生冶炼知识
+          if (ot===3) G.faith = Math.min(100, G.faith+.05);
+          if (!G.flags.mineStory){
+            G.flags.mineStory = true;
+            const t = '他们凿开山岩,第一次触及大地深处的铜与铁。';
+            log('【民生】'+t, 'lg-story'); chron(t, 'culture');
+          }
+          if (Math.random()<.12) w.kind = pickJob(home);
+        }
+      } else { w.x += mdx2/md2*w.spd*dt; w.y += mdy2/md2*w.spd*dt; }
       continue;
     }
     // 渔人:驻足水岸,撒网养鱼
@@ -771,6 +836,31 @@ function tickSim(){
   manageWalkers();
   // 自然恢复(每年开春一次)
   if (newYear) natureHeal();
+  // 浆果再生(缓慢)
+  if (RNG() < .5){
+    for (let k=0;k<6;k++){
+      const i=(RNG()*W.T.length)|0;
+      if (W.BERRY && !W.BERRY[i] && (W.T[i]===TER.GRASS||W.T[i]===TER.FOREST) && !W.FARM[i] && RNG()<.2) W.BERRY[i]=1;
+    }
+  }
+  // 人性回归中庸
+  if (G.nature) G.nature *= .999;
+  // 信仰过热的代价:教会掌权,求知受缚(Simmiland 式权衡)
+  if (G.faith >= 95){
+    G.faithHighT++;
+    if (G.faithHighT > 300 && !G.flags.theocracy){
+      G.flags.theocracy = true;
+      const t = '信仰过热:教会执掌了一切,质疑被视作异端——求知的脚步慢了下来。';
+      log('⚖️ '+t, 'lg-bad'); chron(t, 'doom');
+    }
+  } else {
+    if (G.flags.theocracy && G.faith < 80){
+      G.flags.theocracy = false;
+      const t = '教会归于本分,理性重新抬起头。';
+      log('📖 '+t, 'lg-good'); chron(t, 'culture');
+    }
+    G.faithHighT = Math.max(0, G.faithHighT-2);
+  }
   // 废墟风化(约30年湮灭)
   for (const r of G.ruins) r.t++;
   G.ruins = G.ruins.filter(r=>r.t<120);
@@ -932,7 +1022,7 @@ function tickWars(){
   // —— 宣战 ——
   const alive = aliveSettlements();
   if (G.era >= 1 && alive.length >= 2 && G.year >= (G.nextWarY||0)){
-    let chance = (.0012 + G.era*.0007) * (G.flags.lang ? .8 : 1); // 共同神话降低开战冲动
+    let chance = (.0012 + G.era*.0007) * (G.flags.lang ? .8 : 1) * (G.nature < -20 ? 1.3 : G.nature > 20 ? .85 : 1); // 人性:好战嗜血,和平向善
     for (const s of alive) if (s.famine) chance += .0025;
     if (RNG() < chance){
       const attackers = alive.filter(s=>s.pop>20);

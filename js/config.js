@@ -124,6 +124,12 @@ const POWERS = [
    desc:'圣光降临:治愈瘟疫与创伤,人口小幅回升,信仰提升。'},
   {id:'harvest',  icon:'🌾', name:'丰收', cost:12, cd:10, group:'bless', dur:45,
    desc:'金色祝福:范围内即时填满粮仓,肥力翻倍 45 秒。'},
+  {id:'tree',   icon:'🌳', name:'造树', cost:5,  cd:2,  group:'bless', dur:0,
+   desc:'在目标地块种下树木——森林渐成,木材与果实随之而来。'},
+  {id:'berry',  icon:'🫐', name:'浆果丛', cost:6, cd:3, group:'bless', dur:0,
+   desc:'种下浆果丛——采集者的四季口粮。'},
+  {id:'ore',    icon:'⛏️', name:'现矿', cost:10, cd:5,  group:'bless', dur:0,
+   desc:'群山中显现矿脉(铜/铁/金)。'},
   {id:'insight',  icon:'💡', name:'神启', cost:25, cd:30, group:'bless',
    desc:'向最大的聚落降下灵感:知识 + 剩余需求的 8%。'},
 ];

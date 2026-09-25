@@ -121,8 +121,9 @@ function castPower(id, wx, wy){ // wx,wy = 格坐标(浮点)
   G.power -= p.cost;
   G.cooldowns[id] = performance.now() + p.cd*1000;
   G.stats.cast++;
-  if (p.group==='disaster'){ G.faith = Math.max(0, G.faith-1.6); chron(`神之怒 · ${p.name}降临大地`, 'god'); }
-  else if (p.group==='bless'){ chron(`神恩 · ${p.name}眷顾子民`, 'god'); }
+  if (p.group==='disaster'){ G.faith = Math.max(0, G.faith-1.6); G.nature = Math.max(-100, G.nature-3); chron(`神之怒 · ${p.name}降临大地`, 'god'); }
+  else if (p.id==='tree' || p.id==='berry' || p.id==='ore'){ G.nature = Math.min(100, G.nature+2); chron(`神造万物 · ${p.name}现于大地`, 'god'); }
+  else if (p.group==='bless'){ G.nature = Math.min(100, G.nature+1); chron(`神恩 · ${p.name}眷顾子民`, 'god'); }
   switch(id){
     case 'sun': case 'rain': case 'snow':
       G.weatherZones.push({type:id, x:wx, y:wy, r:8, t:p.dur});
@@ -191,6 +192,47 @@ function castPower(id, wx, wy){ // wx,wy = 格坐标(浮点)
         if (Math.hypot(s.x-wx,s.y-wy)<7){ s.store = storeCap(s); FX.heal(s.tx,s.ty); }
       AU.sparkle(); FX.ring(wx*TILE,wy*TILE,110,'#ffd86b');
       log('金色的祝福洒满田野,粮仓满溢。', 'lg-god');
+      break; }
+    case 'tree': {
+      let n=0;
+      for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
+        const x2=(wx+dx)|0, y2=(wy+dy)|0;
+        if (!inW(x2,y2)) continue;
+        const i2=y2*WORLD_W+x2;
+        if ((W.T[i2]===TER.GRASS||W.T[i2]===TER.HILL) && W.TR[i2]===0 && !W.FARM[i2] && W.LAVA[i2]<=0){
+          W.TR[i2]=2; bakeTile(x2,y2); n++;
+        }
+      }
+      AU.click();
+      if (n) log('🌳 神迹:林木自大地升起。', 'lg-god');
+      break; }
+    case 'berry': {
+      let n=0;
+      for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
+        const x2=(wx+dx)|0, y2=(wy+dy)|0;
+        if (!inW(x2,y2)) continue;
+        const i2=y2*WORLD_W+x2;
+        if ((W.T[i2]===TER.GRASS||W.T[i2]===TER.FOREST) && !W.BERRY[i2] && !W.FARM[i2]){
+          W.BERRY[i2]=1; bakeTile(x2,y2); n++;
+        }
+      }
+      AU.click();
+      if (n) log('🫐 浆果丛在大地上蔓延。', 'lg-god');
+      break; }
+    case 'ore': {
+      const x2=wx|0, y2=wy|0;
+      if (!inW(x2,y2) || (tAt(x2,y2)!==TER.MOUNT && tAt(x2,y2)!==TER.HILL && tAt(x2,y2)!==TER.PEAK)){
+        toast('矿脉只会在群山中显现——先选一座山', 3);
+        G.power += p.cost; // 退回
+        break;
+      }
+      const i2=y2*WORLD_W+x2;
+      if (!W.ORE[i2]){
+        const r2=Math.random();
+        W.ORE[i2] = r2<.5 ? 1 : r2<.85 ? 2 : 3;
+        bakeTile(x2,y2);
+        log(`⛏️ 群山中显现${W.ORE[i2]===1?'铜':W.ORE[i2]===2?'铁':'金'}矿脉!`, 'lg-god');
+      } else toast('此处已有矿脉', 2.5);
       break; }
     case 'insight': {
       G.stats.miracles++; G.faith=Math.min(100,G.faith+3);
