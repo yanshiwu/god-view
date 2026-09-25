@@ -700,11 +700,92 @@ function updateWalkers(dt){
       w._bcT = (w._bcT||0) + dt;
       if (w._bcT > 2){ w._bcT = 0; borderCheck(w, home); if (w.kind==='dead') continue; }
     }
-    // 农夫:寻找成熟农田,收割入仓
+    // 农夫:春耕→夏耘→秋收(扛穗回仓)→冬藏,四季各有其务
     if (w.kind==='farm'){
+      // 扛粮回仓途中
+      if (w.carry==='grain'){
+        const bdx=w.tx-w.x, bdy=w.ty-w.y, bd=Math.hypot(bdx,bdy);
+        if (bd < 5){ w.carry=undefined; FX.burst(w.x, w.y, 6, '#ffd86b', 40); }
+        else { w.x += bdx/bd*w.spd*dt; w.y += bdy/bd*w.spd*dt; }
+        continue;
+      }
+      // 冬藏:围炉休整,偶去林缘拾柴
+      if (G.season===3){
+        if (Math.hypot(w.tx-w.x, w.ty-w.y) < 4){
+          if (RNG()<.5){ const a=RNG()*Math.PI*2, dd=(3+RNG()*4)*TILE;
+            w.tx=home.tx+Math.cos(a)*dd; w.ty=home.ty+Math.sin(a)*dd; }
+        }
+        const wx2=w.tx-w.x, wy2=w.ty-w.y, wd=Math.hypot(wx2,wy2);
+        if (wd>.5){ w.x+=wx2/wd*w.spd*.6*dt; w.y+=wy2/wd*w.spd*.6*dt; }
+        else if (RNG()<.02) FX.burst(w.x, w.y, 3, '#c9a53f', 30);
+        continue;
+      }
+      // 秋收:寻熟麦
+      if (G.season===2){
+        if (w.tile===undefined || W.FS[w.tile]<3 || W.FS[w.tile]>=6 || W.FARM[w.tile]!==home.id+1)
+          w.tile = findRipeFarm(home);
+        if (w.tile === -1){ w.tile=undefined;
+          // 秋季无熟麦:在田间转悠守望
+          if (Math.hypot(w.tx-w.x, w.ty-w.y) < 4){
+            const a=RNG()*Math.PI*2, dd=(4+RNG()*6)*TILE;
+            w.tx=home.tx+Math.cos(a)*dd; w.ty=home.ty+Math.sin(a)*dd;
+          }
+          const fdx=w.tx-w.x, fdy=w.ty-w.y, fd=Math.hypot(fdx,fdy);
+          if (fd>0.1){ w.x+=fdx/fd*w.spd*dt; w.y+=fdy/fd*w.spd*dt; }
+          continue;
+        }
+        w.tx = (w.tile%WORLD_W)*TILE+7; w.ty = ((w.tile/WORLD_W)|0)*TILE+7;
+        const mdx=w.tx-w.x, mdy=w.ty-w.y, md=Math.hypot(mdx,mdy);
+        if (md < 5){
+          W.FS[w.tile] = 0;
+          home.store = Math.min(storeCap(home), home.store+14);
+          G.stats.harvests++;
+          FX.burst(w.x, w.y, 9, '#ffd86b', 55);
+          w.carry = 'grain'; w.tile = undefined;
+          w.tx = home.tx; w.ty = home.ty; // 扛穗回仓
+        } else {
+          w.x += mdx/md*w.spd*dt; w.y += mdy/md*w.spd*dt;
+        }
+        continue;
+      }
+      // 春耕:翻土下种(休耕地)
+      if (G.season===0){
+        if (w.gtile===undefined || W.FARM[w.gtile]!==home.id+1 || W.FS[w.gtile]>1){
+          let best=-1, bd=1e9;
+          const cx2=home.x|0, cy2=home.y|0, rr2=LEVELS[home.level].r+6;
+          for (let dy=-rr2;dy<=rr2;dy+=2) for (let dx=-rr2;dx<=rr2;dx+=2){
+            const x2=cx2+dx, y2=cy2+dy;
+            if (!inW(x2,y2)) continue;
+            const i2=y2*WORLD_W+x2;
+            if (W.FARM[i2]===home.id+1 && W.FS[i2]===0){
+              const d2=dx*dx+dy*dy; if (d2<bd){ bd=d2; best=i2; }
+            }
+          }
+          if (best<0){ w.gtile=-2; }
+          else { w.gtile=best; w.gtx=(best%WORLD_W)*TILE+7; w.gty=((best/WORLD_W)|0)*TILE+7; }
+        }
+        if (w.gtile===-2){ // 无田可耕:踏勘找新田
+          if (Math.hypot(w.tx-w.x, w.ty-w.y) < 4){
+            const a=RNG()*Math.PI*2, dd=(6+RNG()*9)*TILE;
+            w.tx=home.tx+Math.cos(a)*dd; w.ty=home.ty+Math.sin(a)*dd;
+          }
+          const fdx=w.tx-w.x, fdy=w.ty-w.y, fd=Math.hypot(fdx,fdy);
+          if (fd>0.1){ w.x+=fdx/fd*w.spd*dt; w.y+=fdy/fd*w.spd*dt; }
+          continue;
+        }
+        w.tx=w.gtx; w.ty=w.gty;
+        const pdx=w.tx-w.x, pdy=w.ty-w.y, pd=Math.hypot(pdx,pdy);
+        if (pd < 4){
+          w.workT=(w.workT||0)+dt;
+          if (Math.random()<.06) FX.burst(w.x, w.y, 4, '#8a744a', 34); // 翻起的土块
+        } else { w.x += pdx/pd*w.spd*dt; w.y += pdy/pd*w.spd*dt; }
+        continue;
+      }
+      // 夏耘:青苗田间除草
       if (w.tile===undefined || W.FS[w.tile]<3 || W.FS[w.tile]>=6 || W.FARM[w.tile]!==home.id+1)
-        w.tile = findRipeFarm(home);
-      if (w.tile === -1){
+        w.tile = findRipeFarm(home) === -1 ? undefined : findRipeFarm(home);
+      if (w.tile === undefined){
+      {
         // 无成熟农田:去自己部族的青苗田里备耕除草,没有就去更远的荒地踏勘
         if (w.gtile===undefined || Math.hypot(w.gtx-w.x, w.gty-w.y) < 4){
           let best=-1, bd=1e9;
@@ -726,7 +807,11 @@ function updateWalkers(dt){
         }
         w.tx=w.gtx; w.ty=w.gty;
         const fdx=w.tx-w.x, fdy=w.ty-w.y, fd=Math.hypot(fdx,fdy);
-        if (fd>0.1){ w.x+=fdx/fd*w.spd*dt; w.y+=fdy/fd*w.spd*dt; }
+        if (fd < 4){
+          w.workT=(w.workT||0)+dt;
+          if (Math.random()<.05) FX.burst(w.x, w.y, 3, '#7da35a', 30); // 拔草
+          if (w.workT > 6){ w.workT=0; w.gtile=undefined; }
+        } else if (fd>0.1){ w.x+=fdx/fd*w.spd*dt; w.y+=fdy/fd*w.spd*dt; }
         continue;
       }
       w.tile===w.gtile && (w.gtile=undefined);
@@ -742,6 +827,7 @@ function updateWalkers(dt){
         w.x += mdx/md*w.spd*dt; w.y += mdy/md*w.spd*dt;
       }
       continue;
+    }
     }
     // 粮车:运粮进城
     if (w.kind==='cart'){
@@ -915,19 +1001,47 @@ function updateWalkers(dt){
       } else { w.x += fdx/fd*w.spd*dt; w.y += fdy/fd*w.spd*dt; }
       continue;
     }
-    // 工匠:修缮受损的房屋,人满时为新居打地基
+    // 工匠:伐木取料→扛木到工地→锤打建造(建造行为有先后逻辑)
     if (w.kind==='build'){
       const need = home.damaged > .05;
       if (!need && home.pop <= LEVELS[home.level].cap*.75){ w.kind=pickJob(home); continue; }
-      if (w.site===undefined || Math.hypot(w.tx-w.x,w.ty-w.y)<3 && w.jobT>12){
-        const r2 = 6 + home.level*5;
-        w.site = 1; w.jobT = 0;
-        const a2 = RNG()*Math.PI*2;
-        w.tx = home.tx + Math.cos(a2)*r2*TILE*.8; w.ty = home.ty + Math.sin(a2)*r2*TILE*.8;
+      // 第一阶段:去林缘伐木取料
+      if (!w.carry){
+        if (w.woodSpot===undefined || W.TR[w.woodSpot]===0){
+          w.woodSpot = -1;
+          let best=-1, bd=1e9;
+          const cx2=home.x|0, cy2=home.y|0, rr2=LEVELS[home.level].r+5;
+          for (let dy=-rr2;dy<=rr2;dy+=2) for (let dx=-rr2;dx<=rr2;dx+=2){
+            const x2=cx2+dx, y2=cy2+dy;
+            if (!inW(x2,y2)) continue;
+            const i2=y2*WORLD_W+x2;
+            if (W.TR[i2]>0){ const d2=dx*dx+dy*dy; if (d2<bd){ bd=d2; best=i2; } }
+          }
+          w.woodSpot = best;
+          if (best>=0){ w.tx=(best%WORLD_W)*TILE+7; w.ty=((best/WORLD_W)|0)*TILE+7; }
+        }
+        if (w.woodSpot < 0){ w.kind=pickJob(home); continue; }
+        const ldx=w.tx-w.x, ldy=w.ty-w.y, ld=Math.hypot(ldx,ldy);
+        if (ld < 4){
+          w.workT=(w.workT||0)+dt;
+          if (Math.random()<.08) FX.burst(w.x, w.y, 3, '#8a6a48', 30); // 木屑
+          if (w.workT > 4){ w.workT=0; w.carry='log'; w.jobT=0;
+            const r2 = 6 + home.level*5;
+            const a2 = RNG()*Math.PI*2;
+            w.tx = home.tx + Math.cos(a2)*r2*TILE*.8; w.ty = home.ty + Math.sin(a2)*r2*TILE*.8;
+          }
+        } else { w.x += ldx/ld*w.spd*dt; w.y += ldy/ld*w.spd*dt; }
+        continue;
+      }
+      // 第二阶段:扛木到工地锤打
+      w.woodSpot = undefined;
+      if (w.site===undefined || Math.hypot(w.tx-w.x,w.ty-w.y)<3 && w.jobT>14){
+        w.site = 1; w.jobT = 0; w.carry = undefined;
       }
       const bdx=w.tx-w.x, bdy=w.ty-w.y, bd=Math.hypot(bdx,bdy);
       if (bd < 3){
         w.jobT = (w.jobT||0)+dt;
+        if (Math.random()<.03) FX.burst(w.x, w.y, 2, '#e8d5a0', 26); // 锤击火花
         if (Math.random()<.02) FX.smoke(w.x, w.y-4, 1, 'rgba(180,160,130,.5)');
         if (need) home.damaged = Math.max(0, home.damaged - .008*dt);
         if (w.jobT > 14){
@@ -939,6 +1053,13 @@ function updateWalkers(dt){
           if (Math.random()<.3) w.kind = pickJob(home);
         }
       } else { w.x += bdx/bd*w.spd*dt; w.y += bdy/bd*w.spd*dt; }
+      continue;
+    }
+    // 猎人扛猎物回村
+    if (w.kind==='hunt' && w.carry==='prey'){
+      const cdx2=w.tx-w.x, cdy2=w.ty-w.y, cd2=Math.hypot(cdx2,cdy2);
+      if (cd2 < 6){ w.carry=undefined; w.preyBig=undefined; }
+      else { w.x += cdx2/cd2*w.spd*dt; w.y += cdy2/cd2*w.spd*dt; }
       continue;
     }
     // 猎人:追逐兽群/鱼群,得手后满载而归
@@ -976,7 +1097,9 @@ function updateWalkers(dt){
           home.store += h.kind==='mammoth'?40 : h.kind==='boar'?14 : 10;
           G.stats.hunted++;
           FX.burst(w.x, w.y, 7, '#b09a72', 46);
-          w.kind='walk';
+          w.carry = 'prey';                       // 扛猎物回村
+          w.tx = home.tx; w.ty = home.ty;
+          w.preyBig = h.kind==='mammoth';
         }
       } else {
         w.x += hdx/hd*w.spd*dt; w.y += hdy/hd*w.spd*dt;

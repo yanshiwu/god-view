@@ -751,6 +751,25 @@ function drawWalkers(){
     ctx.beginPath(); ctx.arc(w.x, w.y+bob, 1.9, 0, 7); ctx.fill();
     ctx.fillStyle = G.era>=3 ? '#e8d5b5' : '#8a6a48';
     ctx.beginPath(); ctx.arc(w.x, w.y+bob-2, 1, 0, 7); ctx.fill();
+    // 背负物:秋收的麦捆 / 建房的木料 / 狩猎的猎物
+    if (w.carry==='grain'){
+      ctx.fillStyle='#d8b545';
+      ctx.beginPath(); ctx.ellipse(w.x-2.2, w.y+bob-1.4, 2.4, 1.4, -.5, 0, 7); ctx.fill();
+      ctx.strokeStyle='#a8862f'; ctx.lineWidth=.5;
+      ctx.beginPath(); ctx.moveTo(w.x-3.4, w.y+bob-2); ctx.lineTo(w.x-1, w.y+bob-.8); ctx.stroke();
+    } else if (w.carry==='log'){
+      ctx.strokeStyle='#8a6a48'; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.moveTo(w.x-2.6, w.y+bob-2.2); ctx.lineTo(w.x+2.2, w.y+bob-1.4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(w.x-2.4, w.y+bob-1.2); ctx.lineTo(w.x+2.4, w.y+bob-.4); ctx.stroke();
+    } else if (w.carry==='prey'){
+      ctx.fillStyle=w.preyBig?'#7a5638':'#8a6a48';
+      ctx.beginPath(); ctx.ellipse(w.x-2.4, w.y+bob-1.6, 3, w.preyBig?2.2:1.7, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle='#5a4028'; ctx.lineWidth=.6;
+      ctx.beginPath();
+      ctx.moveTo(w.x-4.4, w.y+bob-1); ctx.lineTo(w.x-5.4, w.y+bob+.4);
+      ctx.moveTo(w.x-.8, w.y+bob-2.4); ctx.lineTo(w.x, w.y+bob-.6);
+      ctx.stroke();
+    }
     if (w.kind==='war'){ // 武器随时代:石矛→骨弓→青铜剑→火枪
       const we = G.era;
       if (we<=1){ // 木矛/石斧
