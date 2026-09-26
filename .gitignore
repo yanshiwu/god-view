@@ -3,3 +3,9 @@ _recovered.json
 *.log
 _p*.py
 godview_bilibili.webm
+godview_bilibili.webm
+godview_*.webm
+godview_*.avi
+godview_*.mp4
+_avi*.py
+_avi_cfg.json
